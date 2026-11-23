@@ -28,3 +28,12 @@ One line per non-obvious decision: what was chosen and why.
 - Tool output never sets verification state, final severity or final remediation. A re-scan updates tool fields and `seen_count` but leaves assessor and AI fields untouched.
 - Nmap findings are limited to notable exposed admin/database services and disclosed service versions; other open ports stay in recon rather than becoming finding noise.
 - ZAP profile `active_limited` is conservative by config: one thread per host, one minute per rule, 30-minute scan cap and ten alerts per rule.
+- The sanitizer redacts every IP address, not only private ones: the model does not need addresses, and redacting only private ranges would leak public targets if the allowlist were ever enabled.
+- AI input carries the relative endpoint path, never the absolute host, and full HTTP messages are left to per-finding evidence capture rather than duplicated inside the tool payload.
+- Redaction placeholders are typed (`[REDACTED_PASSWORD]`, `[REDACTED_COOKIE]`) so the model can still reason about context. The sanitizer is idempotent and returns per-type counts for the AI disclosure appendix.
+- One OpenAI-compatible provider class covers Gemini, Groq, OpenRouter and Ollama; only environment variables change. `response_format` is retried without JSON mode once when a gateway rejects it.
+- AI prompts are versioned in code (`PROMPT_VERSION`) and shared by both functions; output schemas forbid extra fields, so an attempted prompt injection outside the schema is rejected.
+- AI retries transient provider failures three times with jitter, performs exactly one repair retry for invalid JSON/schema, and stores each attempt; a cache hit creates a new analysis row with zero latency instead of hiding the reuse.
+- The AI cache key is provider + model + prompt version + exact sanitized prompt, so identical evidence can reuse a result across findings but never across providers or prompt versions.
+- Bulk analysis runs in a background in-process task, serially per job, one job per assessment; progress is in memory and results are in `ai_analyses`, consistent with the single-process deployment.
+- AI may set only `ai_suggested_severity`. Final severity, verification status and final remediation remain assessor-only fields, and tests assert they survive re-analysis.

@@ -39,6 +39,9 @@ import app.db.models
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import create_app
+from app.services.ai.manager import AIAnalysisManager, get_ai_manager
+from app.services.ai.mock import MockProvider
+from app.services.ai.service import AIAnalysisService, RateLimiter
 from app.services.scan_manager import ScanManager, get_scan_manager
 from tests.fakes import FakeNmapRunner, FakeZapRunner
 
@@ -100,7 +103,38 @@ async def scan_manager(
 
 
 @pytest.fixture
-def app(session_factory: async_sessionmaker[AsyncSession], scan_manager: ScanManager):
+def ai_provider() -> MockProvider:
+    return MockProvider()
+
+
+@pytest.fixture
+def ai_service(ai_provider: MockProvider) -> AIAnalysisService:
+    return AIAnalysisService(
+        get_settings(),
+        ai_provider,
+        limiter=RateLimiter(1000, 10),
+        retry_base_seconds=0,
+    )
+
+
+@pytest.fixture
+async def ai_manager(
+    session_factory: async_sessionmaker[AsyncSession],
+    ai_service: AIAnalysisService,
+) -> AsyncIterator[AIAnalysisManager]:
+    manager = AIAnalysisManager(
+        session_factory, get_settings(), service=ai_service
+    )
+    yield manager
+    await manager.shutdown()
+
+
+@pytest.fixture
+def app(
+    session_factory: async_sessionmaker[AsyncSession],
+    scan_manager: ScanManager,
+    ai_manager: AIAnalysisManager,
+):
     application = create_app()
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
@@ -109,6 +143,7 @@ def app(session_factory: async_sessionmaker[AsyncSession], scan_manager: ScanMan
 
     application.dependency_overrides[get_db] = override_get_db
     application.dependency_overrides[get_scan_manager] = lambda: scan_manager
+    application.dependency_overrides[get_ai_manager] = lambda: ai_manager
     return application
 
 

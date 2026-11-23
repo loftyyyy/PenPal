@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, NotFoundError
 from app.core.security import decode_access_token
-from app.db.models import Assessment, User
+from app.db.models import Assessment, Finding, User
 from app.db.session import get_db
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
@@ -55,6 +55,13 @@ async def get_assessment_or_404(db: AsyncSession, assessment_id: int) -> Assessm
     if assessment is None:
         raise NotFoundError("Assessment", assessment_id)
     return assessment
+
+
+async def get_finding_or_404(db: AsyncSession, finding_id: int) -> Finding:
+    finding = await db.get(Finding, finding_id)
+    if finding is None:
+        raise NotFoundError("Finding", finding_id)
+    return finding
 
 
 class Pagination:

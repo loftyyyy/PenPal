@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.db.enums import NmapProfile
+from app.services.ai.base import AIProvider, ProviderResult
 from app.services.nmap_runner import NmapRunResult, ScanCancelled
 from app.services.scan_manager import RawOutput
 
@@ -71,6 +72,40 @@ class FakeNmapRunner:
 
 def load_zap_alerts() -> list[dict[str, Any]]:
     return json.loads(ZAP_ALERTS_FIXTURE.read_text(encoding="utf-8"))
+
+
+class ScriptedProvider(AIProvider):
+    """Replays scripted outputs or exceptions and records every prompt."""
+
+    name = "scripted"
+    model = "scripted-model"
+
+    def __init__(self, outputs: list[str | Exception]) -> None:
+        self.outputs = list(outputs)
+        self.calls: list[dict[str, str]] = []
+        self.active = 0
+        self.max_active = 0
+        self.gate: asyncio.Event | None = None
+
+    async def complete_json(
+        self, system: str, user: str, *, max_tokens: int
+    ) -> ProviderResult:
+        self.calls.append(
+            {"system": system, "user": user, "max_tokens": str(max_tokens)}
+        )
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        try:
+            if self.gate is not None:
+                await self.gate.wait()
+            if not self.outputs:
+                raise AssertionError("ScriptedProvider ran out of outputs")
+            item = self.outputs.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return ProviderResult(content=item, prompt_tokens=10, completion_tokens=20)
+        finally:
+            self.active -= 1
 
 
 @dataclass

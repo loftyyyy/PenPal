@@ -109,6 +109,14 @@ class Settings(BaseSettings):
             raise ValueError("ENV must be one of: development, test, production")
         return normalized
 
+    @field_validator("ai_provider")
+    @classmethod
+    def _validate_ai_provider(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"mock", "openai_compat"}:
+            raise ValueError("AI_PROVIDER must be one of: mock, openai_compat")
+        return normalized
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"
@@ -149,8 +157,13 @@ class Settings(BaseSettings):
             problems.append("FIRST_ADMIN_PASSWORD is a default or shorter than 12 characters")
         if self.zap_api_key.strip() in WEAK_SECRET_VALUES:
             problems.append("ZAP_API_KEY is a default value")
-        if self.ai_provider == "openai_compat" and not (self.ai_base_url and self.ai_model):
-            problems.append("AI_BASE_URL and AI_MODEL are required when AI_PROVIDER=openai_compat")
+        if self.ai_provider == "openai_compat" and not (
+            self.ai_base_url and self.ai_model and self.ai_api_key
+        ):
+            problems.append(
+                "AI_BASE_URL, AI_MODEL and AI_API_KEY are required when "
+                "AI_PROVIDER=openai_compat"
+            )
         if problems:
             message = "Unsafe configuration: " + "; ".join(problems)
             if self.is_production:

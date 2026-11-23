@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
+from typing import Any
+
 from app.core.security import hash_password
-from app.db.enums import AssessmentStatus, Role, ScopeKind
-from app.db.models import Assessment, ScopeItem, User
+from app.db.enums import (
+    AssessmentStatus,
+    EvidenceType,
+    FindingCategory,
+    FindingSource,
+    Role,
+    ScopeKind,
+    Severity,
+)
+from app.db.models import Assessment, Evidence, Finding, ScopeItem, User
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,3 +98,60 @@ async def add_scope(
     await db.commit()
     await db.refresh(item)
     return item
+
+
+async def create_finding(
+    db: AsyncSession,
+    assessment: Assessment,
+    *,
+    title: str = "SQL Injection in product search",
+    description: str = "The search parameter appears injectable.",
+    source: FindingSource = FindingSource.ZAP,
+    category: FindingCategory = FindingCategory.INJECTION,
+    tool_severity: Severity = Severity.HIGH,
+    affected_url: str = "http://127.0.0.1:3000/rest/products/search?q=test",
+    http_method: str = "GET",
+    parameter: str = "q",
+    raw: dict[str, Any] | None = None,
+) -> Finding:
+    fingerprint = hashlib.sha256(
+        f"{assessment.id}|{title}|{parameter}".encode()
+    ).hexdigest()
+    finding = Finding(
+        assessment_id=assessment.id,
+        source=source,
+        fingerprint=fingerprint,
+        title=title,
+        description=description,
+        category=category,
+        affected_url=affected_url,
+        http_method=http_method,
+        parameter=parameter,
+        tool_severity=tool_severity,
+        raw=raw or {"alert": title, "risk": tool_severity.value, "param": parameter},
+    )
+    db.add(finding)
+    await db.commit()
+    await db.refresh(finding)
+    return finding
+
+
+async def add_evidence(
+    db: AsyncSession,
+    finding: Finding,
+    content: str,
+    *,
+    evidence_type: EvidenceType = EvidenceType.HTTP_EXCHANGE,
+    user: User | None = None,
+) -> Evidence:
+    evidence = Evidence(
+        finding_id=finding.id,
+        type=evidence_type,
+        content=content,
+        sha256=hashlib.sha256(content.encode()).hexdigest(),
+        created_by=user.id if user else None,
+    )
+    db.add(evidence)
+    await db.commit()
+    await db.refresh(evidence)
+    return evidence

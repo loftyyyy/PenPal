@@ -2,6 +2,21 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 5: sanitizer and advisory AI layer
+
+- `sanitizer.py`: idempotent redaction of cookie/authorization/API-key headers, JWTs and bearer/basic tokens, provider key patterns, private keys, long hex/base64 secrets, sensitive parameter values, query values (names kept), URL userinfo and hosts, emails, phones, Luhn-valid card numbers and all IPv4/IPv6 addresses. Returns per-type counts and truncates to `AI_MAX_EVIDENCE_CHARS`.
+- AI input uses the relative endpoint path, drops full HTTP messages (they are separate evidence), sanitizes up to five evidence rows and the normalizer payload, and stores the exact sent prompt plus the redaction report in `ai_analyses`.
+- Provider interface `complete_json(system, user, *, max_tokens)` with `MockProvider` (deterministic, no network) and one `OpenAICompatProvider` for Gemini/Groq/OpenRouter/Ollama. JSON mode with a one-time fallback when a gateway rejects `response_format`.
+- Two functions with shared versioned prompts and strict Pydantic schemas (`extra="forbid"`): `interpret` and `remediate`. Target data sits inside `<finding_data>` and is declared untrusted.
+- Robustness: transient provider errors retry with backoff and jitter (3 attempts), invalid output gets exactly one repair retry, every attempt is persisted, process-wide RPM/concurrency limiting, and caching by provider/model/prompt version/sanitized prompt.
+- Endpoints: `POST /findings/{id}/analyze`, `POST /assessments/{id}/analyze` (background bulk with `min_severity`, `only_unanalyzed`), `GET /assessments/{id}/ai-status`, `GET /findings/{id}/ai-analyses`.
+- AI sets only `ai_suggested_severity`; it never writes `final_severity`, `verification_status`, or final remediation. Audit rows record every attempt.
+- Tests: sanitizer table and idempotence tests (93% statement/branch coverage on the module), provider request/error/fallback tests, service cache/repair/retry/concurrency tests, and API single/bulk/status/failure tests. Full suite: 187 passed.
+- App start check: OpenAPI generation (22 paths) and lifespan health check pass locally.
+- Not verified here: a real hosted AI call. Tests never reach a provider; `AI_PROVIDER=mock` drives the demo path.
+
+Next: verification, manual findings and evidence upload, audit log, dashboard.
+
 ## 2026-11-24 — Phase 4: ZAP integration and finding normalizer
 
 - `ZapClient` wraps only the REST calls PenPal needs (`core`, `context`, `spider`, `pscan`, `ascan`, `alert`); the API key travels in `X-ZAP-API-Key`, never in a URL.
