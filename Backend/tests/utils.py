@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from app.core.security import hash_password
-from app.db.enums import Role
-from app.db.models import User
+from app.db.enums import AssessmentStatus, Role, ScopeKind
+from app.db.models import Assessment, ScopeItem, User
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,3 +41,49 @@ async def login_headers(
     )
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def create_assessment(
+    db: AsyncSession,
+    *,
+    user: User,
+    name: str = "LSRS test assessment",
+    target_base_url: str | None = "http://localhost:3000",
+    authorized: bool = False,
+) -> Assessment:
+    assessment = Assessment(
+        name=name,
+        target_name="Love & Styles Rental System",
+        target_base_url=target_base_url,
+        owner_name="LSRS owners",
+        authorization_reference="signed-authorization-letter.pdf",
+        authorization_confirmed=authorized,
+        authorization_confirmed_by=user.id if authorized else None,
+        status=AssessmentStatus.READY if authorized else AssessmentStatus.DRAFT,
+        selected_categories=["authentication", "access_control"],
+        created_by=user.id,
+    )
+    db.add(assessment)
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment
+
+
+async def add_scope(
+    db: AsyncSession,
+    assessment: Assessment,
+    kind: ScopeKind,
+    value: str,
+    *,
+    in_scope: bool = True,
+) -> ScopeItem:
+    item = ScopeItem(
+        assessment_id=assessment.id,
+        kind=kind,
+        value=value,
+        in_scope=in_scope,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
