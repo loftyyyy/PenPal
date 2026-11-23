@@ -2,6 +2,22 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 7: HTML and PDF reports
+
+- `report.html.j2` covers cover, scope/authorization, methodology, executive summary, confirmed findings with evidence and remediation, Appendix A verification outcomes, Appendix B AI usage/redaction disclosure and Appendix C scan log.
+- Only assessor-confirmed findings enter the main report. Tool, AI and pending findings stay out; rejected and needs-retest counts go to Appendix A.
+- Autoescaping is explicit (`autoescape=True`) because the `.j2` suffix would otherwise disable Jinja's extension-based autoescape. Titles, descriptions and evidence render escaped; a regression test uses script/img payloads.
+- Evidence excerpts are truncated to `REPORT_EVIDENCE_MAX_CHARS` per item; each item keeps its type, stored filename and SHA-256. Full evidence stays in the database.
+- The executive summary is deterministic text from counts, not AI prose. Appendix B lists provider/model usage and aggregates the stored redaction reports.
+- Files are written under `DATA_DIR/reports/{assessment_id}/report-{id}.{html|pdf}` and hashed with SHA-256. Downloads resolve inside `DATA_DIR`.
+- `POST /assessments/{id}/reports`, `GET /assessments/{id}/reports`, `GET /reports/{id}/download`.
+- PDF rendering is injectable for tests. If WeasyPrint fails, the HTML file is kept and a ready HTML report row is returned with the reason and `pdf_fallback=true`, so the HTML report still works.
+- Tests: confirmed-only content, escaping, truncation, scope/AI/scan sections, SHA-256, download, PDF success, PDF fallback, not-ready and unsafe-path refusals. Full suite: 203 passed.
+- App start check: OpenAPI generation (30 paths) and lifespan health check pass locally.
+- Not verified here: real WeasyPrint PDF output on this Windows host (system Pango/GTK libraries); the container installs the required libraries. PDF generation is covered with an injected renderer.
+
+Next: hardening, demo seed data, README and final verification.
+
 ## 2026-11-24 — Phase 6: verification, evidence, audit and dashboard
 
 - Findings API: paginated list with effective-severity/status/category/source filters, `q` search, severity/title/date sorting, detail with the tool payload, and manual finding creation.

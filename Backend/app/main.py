@@ -18,6 +18,7 @@ from app.api.v1 import (
     findings,
     health,
     recon,
+    reports,
     scans,
     scope,
     users,
@@ -137,6 +138,7 @@ def create_app() -> FastAPI:
     app.include_router(ai.router, prefix=settings.api_prefix)
     app.include_router(dashboard.router, prefix=settings.api_prefix)
     app.include_router(audit.router, prefix=settings.api_prefix)
+    app.include_router(reports.router, prefix=settings.api_prefix)
     return app
 
 

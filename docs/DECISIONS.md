@@ -44,3 +44,9 @@ One line per non-obvious decision: what was chosen and why.
 - Evidence uploads require matching extension, MIME type and magic bytes (PNG, JPEG, PDF; UTF-8 text), are capped by `MAX_UPLOAD_BYTES`, and are stored under a UUID filename. Notes are text-only and size-limited.
 - Evidence listing exposes note/exchange content and the stored filename but no file-download endpoint, because the API contract does not define one; report generation reads the stored file directly.
 - Dashboard numbers come from aggregate queries (grouped severity/status/category, distinct AI coverage, one scan query), so the endpoint stays one request without per-finding follow-ups.
+- Reports include confirmed findings only; false-positive and needs-retest counts go to Appendix A and pending findings are omitted entirely.
+- Evidence is truncated per item in the report but never truncated in the database; the report keeps the evidence SHA-256 so the full record remains traceable.
+- Jinja autoescape is set explicitly instead of via `select_autoescape`, because the template ends in `.j2` and extension-based selection would turn autoescaping off.
+- If WeasyPrint fails, the report row becomes a ready HTML report with `pdf_fallback=true` and a safe error message. This keeps the HTML deliverable usable instead of losing it behind a failed PDF request.
+- The PDF renderer is a module function invoked through dependency injection in tests, so no test needs system Pango/GTK; the container remains the only place a real PDF is produced and verified.
+- Report files live in `DATA_DIR/reports/{assessment_id}/report-{id}.{ext}` with a SHA-256, and downloads resolve inside `DATA_DIR` like raw scan output.
