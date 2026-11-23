@@ -2,6 +2,20 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 6: verification, evidence, audit and dashboard
+
+- Findings API: paginated list with effective-severity/status/category/source filters, `q` search, severity/title/date sorting, detail with the tool payload, and manual finding creation.
+- Manual findings start `pending`, carry `source=manual`, use a stable title/endpoint/parameter fingerprint, and are duplicate-guarded per assessment.
+- Verification rules: false positives need a reason of at least 10 characters; confirmed findings need a final severity or fall back to AI-suggested then tool severity, with `severity_defaulted` in the audit row. Decisions can change and every previous/new state is audited.
+- Evidence: text notes or one file per request. Files are capped by `MAX_UPLOAD_BYTES`, restricted to png/jpg/jpeg/txt/pdf, checked for matching extension, MIME type and magic bytes, stored under a random name, and hashed.
+- Audit endpoint: newest-first paginated read of the append-only trail.
+- Dashboard: one aggregate endpoint with effective severity counts (basis labelled), verification and category counts, scan history/duration, AI coverage, top confirmed findings and last-updated time. No per-finding queries.
+- AI cannot write final severity, verification state or final remediation; a regression test re-analyzes a confirmed finding and checks those fields survive.
+- Tests: filter/sort/pagination, manual finding guards, verification rule and default-severity paths, audit history, note and file evidence validation (extension, MIME, signature, size), dashboard counts, empty dashboard and audit pagination. Full suite: 198 passed.
+- App start check: OpenAPI generation (28 paths) and lifespan health check pass locally.
+
+Next: report builder, HTML/PDF and download endpoint.
+
 ## 2026-11-24 — Phase 5: sanitizer and advisory AI layer
 
 - `sanitizer.py`: idempotent redaction of cookie/authorization/API-key headers, JWTs and bearer/basic tokens, provider key patterns, private keys, long hex/base64 secrets, sensitive parameter values, query values (names kept), URL userinfo and hosts, emails, phones, Luhn-valid card numbers and all IPv4/IPv6 addresses. Returns per-type counts and truncates to `AI_MAX_EVIDENCE_CHARS`.

@@ -37,3 +37,10 @@ One line per non-obvious decision: what was chosen and why.
 - The AI cache key is provider + model + prompt version + exact sanitized prompt, so identical evidence can reuse a result across findings but never across providers or prompt versions.
 - Bulk analysis runs in a background in-process task, serially per job, one job per assessment; progress is in memory and results are in `ai_analyses`, consistent with the single-process deployment.
 - AI may set only `ai_suggested_severity`. Final severity, verification status and final remediation remain assessor-only fields, and tests assert they survive re-analysis.
+- "Effective severity" is final severity for confirmed findings, otherwise AI-suggested when present, otherwise tool severity. Finding filters, sorting and dashboard counts all use this one definition and the dashboard labels it.
+- A false-positive decision clears final severity and final remediation; a needs-retest decision clears final severity unless the assessor supplies one. Confirmed is the only decision that contributes to report severity.
+- Confirming without a final severity falls back to AI-suggested then tool severity and writes `severity_defaulted=true` into the audit row, so the shortcut is visible later.
+- Manual findings use a fingerprint of title + endpoint + parameter and are refused as duplicates within one assessment; tool findings keep their provider fingerprint.
+- Evidence uploads require matching extension, MIME type and magic bytes (PNG, JPEG, PDF; UTF-8 text), are capped by `MAX_UPLOAD_BYTES`, and are stored under a UUID filename. Notes are text-only and size-limited.
+- Evidence listing exposes note/exchange content and the stored filename but no file-download endpoint, because the API contract does not define one; report generation reads the stored file directly.
+- Dashboard numbers come from aggregate queries (grouped severity/status/category, distinct AI coverage, one scan query), so the endpoint stays one request without per-finding follow-ups.
