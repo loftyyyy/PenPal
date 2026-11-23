@@ -1,7 +1,7 @@
 # PenPal
 
-AI-assisted security assessment and vulnerability analysis platform for authorized,
-local testing. PenPal wraps Nmap and OWASP ZAP, normalizes their output into findings,
+AI-assisted security assessment and vulnerability analysis platform for **authorized,
+local** testing. PenPal wraps Nmap and OWASP ZAP, normalizes their output into findings,
 offers advisory AI explanations and remediation, and requires a human assessor to
 confirm every finding.
 
@@ -10,30 +10,26 @@ what the product must never do.
 
 ## Status
 
-Backend under active development. See `docs/PROGRESS.md` and `docs/DECISIONS.md`.
+Backend complete for the course phases. See `docs/PROGRESS.md` for what was built and
+`docs/DECISIONS.md` for non-obvious choices.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
 # edit .env: set SECRET_KEY, FIRST_ADMIN_PASSWORD and ZAP_API_KEY
-docker compose up --build
-```
-
-- API: http://localhost:8000/api/v1/health
-- Docs (development only): http://localhost:8000/docs
-- PostgreSQL and ZAP are **not** published to the host.
-
-With the demo target:
-
-```bash
 docker compose --profile dev-target up --build
 ```
 
-The stand-in target (OWASP Juice Shop) is reachable from the backend as
-`http://target:3000`. Add exactly that URL/host to an assessment's scope. This is a
-stand-in for the Love & Styles Rental System test copy; see the comment in
-`docker-compose.yml` before swapping it.
+- API health: http://localhost:8000/api/v1/health
+- OpenAPI/Swagger (development only): http://localhost:8000/docs
+- The container runs `alembic upgrade head` and the first-admin bootstrap on start.
+- PostgreSQL and ZAP are **not** published to the host.
+
+The `dev-target` profile starts OWASP Juice Shop as a stand-in for the LSRS test copy.
+From the backend it is `http://target:3000`. Add exactly that host/URL to the
+assessment scope. See the comment in `docker-compose.yml` before swapping the real
+LSRS copy.
 
 ## Local development
 
@@ -45,46 +41,190 @@ python -m venv .venv
 .venv/Scripts/activate      # Windows; source .venv/bin/activate on Linux/macOS
 pip install -e ".[dev]"
 pytest
-ruff check .
+ruff check app tests
 ```
 
-Tests use SQLite and fakes; they never call ZAP, Nmap, scan targets or an AI provider.
+Tests use SQLite and fakes. They never call ZAP, Nmap, scan targets or an AI provider.
 
-## Migrations
+## Migrations and seed data
 
 ```bash
 cd Backend
 alembic upgrade head
 alembic revision --autogenerate -m "describe change"
-```
 
-The container runs `alembic upgrade head` before starting uvicorn.
-
-## Seed data
-
-```bash
-cd Backend
 python scripts/seed.py --admin-only   # bootstrap first admin from environment
-python scripts/seed.py --demo         # bootstrap admin plus a demo assessment
+python scripts/seed.py --demo         # admin plus an idempotent demo assessment
 ```
+
+`--demo` creates an authorized LSRS stand-in assessment with in/out-of-scope rules,
+two completed scans, four confirmed findings, one pending, one false positive, one
+needs-retest item, evidence, and one AI analysis. Re-running it is a no-op.
+
+## Configuration
+
+Copy `.env.example` to `.env`. The important variables:
+
+| Variable | Purpose |
+|---|---|
+| `ENV` | `development`, `test` or `production`. Production refuses placeholder secrets. |
+| `SECRET_KEY` | JWT signing key; at least 32 characters in production. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime, default 60. |
+| `DATABASE_URL` | `postgresql+asyncpg://...` in Compose; SQLite in tests. |
+| `DATA_DIR` | Raw scans, evidence uploads and reports. |
+| `FIRST_ADMIN_EMAIL`, `FIRST_ADMIN_PASSWORD` | First administrator bootstrap. |
+| `CORS_ORIGINS` | Comma-separated frontend origins; no wildcard. |
+| `ZAP_BASE_URL`, `ZAP_API_KEY` | Internal ZAP daemon and API key. |
+| `ZAP_TIMEOUT_SECONDS`, `ZAP_POLL_INTERVAL_SECONDS` | ZAP request and polling limits. |
+| `ZAP_MAX_ALERTS`, `ZAP_ALERT_PAGE_SIZE` | Alert export bounds. |
+| `ZAP_MAX_MESSAGE_FETCHES`, `ZAP_MESSAGE_MAX_CHARS` | HTTP evidence sampling limits. |
+| `ZAP_ACTIVE_*` | Conservative active-scan limits. |
+| `ALLOWED_TARGET_NETWORKS` | IP allowlist; default loopback and private ranges. |
+| `ALLOW_PUBLIC_TARGETS` | Keep `false`; public targets are refused even if scoped. |
+| `NMAP_MAX_CONCURRENCY` | Parallel Nmap jobs. |
+| `SCAN_TIMEOUT_*_SECONDS` | Per-tool/profile hard timeouts. |
+| `AI_PROVIDER` | `mock` or `openai_compat`. |
+| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | OpenAI-compatible provider settings. |
+| `AI_MAX_RPM`, `AI_MAX_CONCURRENCY` | Provider rate limits. |
+| `AI_MAX_EVIDENCE_CHARS` | Evidence budget sent to the model. |
+| `MAX_UPLOAD_BYTES` | Manual evidence file cap (default 5 MB). |
+| `REPORT_EVIDENCE_MAX_CHARS` | Evidence excerpt cap in reports. |
 
 ## AI providers
 
-Set `AI_PROVIDER=mock` for tests and demos without a network. For a real provider use
-`AI_PROVIDER=openai_compat` with an OpenAI-compatible base URL:
+`AI_PROVIDER=mock` is deterministic and needs no network; use it for tests and demos.
+For a real provider use `AI_PROVIDER=openai_compat`:
 
 | Provider | `AI_BASE_URL` | Notes |
 |---|---|---|
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | free tier available; prompts may be retained by the provider |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | Free tier available; hosted prompts may be retained by the provider. |
 | Groq | `https://api.groq.com/openai/v1` | |
 | OpenRouter | `https://openrouter.ai/api/v1` | |
-| local Ollama | `http://ollama:11434/v1` | `AI_API_KEY` can be any non-empty string |
+| local Ollama | `http://ollama:11434/v1` | `AI_API_KEY` can be any non-empty value. |
 
-`AI_MODEL` is required for `openai_compat`; no model name is hard-coded. All AI input
-is redacted first and the exact sanitized payload is stored in `ai_analyses`.
+`AI_MODEL` is required and no model name is hard-coded. All AI input is redacted first;
+the exact sanitized prompt and validated output are stored in `ai_analyses`, and AI can
+never set final severity or verification state.
 
-## Ethical rules
+## API overview
 
-Scan only the authorized local target, never public websites or campus networks. The
-scope guard rejects public IPs even when entered as in scope, and ZAP runs with a
-context built from the same rules. See `PROJECT_CONTEXT.md` §14.
+All routes are under `/api/v1`. See `/docs` for the full OpenAPI schema.
+
+| Area | Endpoints |
+|---|---|
+| Health | `GET /health`, `GET /health/dependencies` |
+| Auth | `POST /auth/login`, `GET /auth/me` |
+| Users (admin) | `POST /users`, `GET /users`, `PATCH /users/{id}` |
+| Assessments | `POST/GET /assessments`, `GET/PATCH /assessments/{id}`, `POST /assessments/{id}/confirm-authorization`, `POST /assessments/{id}/archive` |
+| Scope | `POST/GET /assessments/{id}/scope-items`, `DELETE /assessments/{id}/scope-items/{item_id}`, `POST /assessments/{id}/scope/check` |
+| Scans | `POST/GET /assessments/{id}/scans`, `GET /scans/{id}`, `POST /scans/{id}/cancel`, `GET /scans/{id}/raw` |
+| Recon | `GET /assessments/{id}/recon` |
+| Findings | `GET/POST /assessments/{id}/findings`, `GET /findings/{id}`, `PATCH /findings/{id}/verify`, `POST/GET /findings/{id}/evidence` |
+| AI | `POST /findings/{id}/analyze`, `POST /assessments/{id}/analyze`, `GET /assessments/{id}/ai-status`, `GET /findings/{id}/ai-analyses` |
+| Dashboard | `GET /assessments/{id}/dashboard` |
+| Reports | `POST/GET /assessments/{id}/reports`, `GET /reports/{id}/download` |
+| Audit | `GET /assessments/{id}/audit-log` |
+
+## End-to-end demo flow
+
+After `docker compose --profile dev-target up --build` and
+`docker compose exec backend python scripts/seed.py --demo`, or against a fresh stack:
+
+```bash
+BASE=http://localhost:8000/api/v1
+TOKEN=$(curl -s -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@penpal.local","password":"CHANGE_ME-admin-password"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+AUTH="Authorization: Bearer $TOKEN"
+
+# 1. Register and authorize an assessment.
+ASSESSMENT=$(curl -s -X POST "$BASE/assessments" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"Demo","target_name":"LSRS stand-in","target_base_url":"http://target:3000","owner_name":"Demo owner","authorization_reference":"authorization.pdf"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+
+curl -s -X POST "$BASE/assessments/$ASSESSMENT/scope-items" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"kind":"host","value":"target"}'
+curl -s -X POST "$BASE/assessments/$ASSESSMENT/confirm-authorization" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"note":"Authorization checked"}'
+
+# 2. Nmap, then ZAP baseline (one scan at a time per assessment).
+NMAP=$(curl -s -X POST "$BASE/assessments/$ASSESSMENT/scans" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"tool":"nmap","profile":"quick","target":"target","ports":[3000]}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["scan_id"])')
+curl -s "$BASE/scans/$NMAP" -H "$AUTH"          # poll until status=completed
+
+ZAP=$(curl -s -X POST "$BASE/assessments/$ASSESSMENT/scans" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"tool":"zap","profile":"baseline","target":"http://target:3000/"}' \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["scan_id"])')
+curl -s "$BASE/scans/$ZAP" -H "$AUTH"           # poll until status=completed
+
+# 3. Analyze all findings with the configured provider.
+curl -s -X POST "$BASE/assessments/$ASSESSMENT/analyze" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"only_unanalyzed":true}'
+curl -s "$BASE/assessments/$ASSESSMENT/ai-status" -H "$AUTH"
+
+# 4. Verify one finding; only confirmed findings enter the report.
+FINDING=$(curl -s "$BASE/assessments/$ASSESSMENT/findings?page_size=1" -H "$AUTH" \
+  | python -c 'import json,sys; print(json.load(sys.stdin)["items"][0]["id"])')
+curl -s -X PATCH "$BASE/findings/$FINDING/verify" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"decision":"confirmed","final_severity":"high","final_remediation":"Apply the vendor fix."}'
+
+# 5. Dashboard, report, download.
+curl -s "$BASE/assessments/$ASSESSMENT/dashboard" -H "$AUTH"
+REPORT=$(curl -s -X POST "$BASE/assessments/$ASSESSMENT/reports" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"format":"html"}' | python -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+curl -s -L "$BASE/reports/$REPORT/download" -H "$AUTH" -o report.html
+```
+
+Use `"format":"pdf"` for PDF. If WeasyPrint cannot render on the host for a local run,
+the API keeps a ready HTML report and returns `pdf_fallback=true`; the container installs
+the required Pango/Cairo libraries.
+
+## Security notes
+
+- Every scan re-checks authorization and scope at execution time. Out-of-scope rules
+  beat in-scope rules, DNS is resolved, and public IPs are denied by default.
+- ZAP gets the scope guard's include/exclude context, so spider and active scans cannot
+  wander to other hosts via links or redirects.
+- Passwords use argon2; JWTs are short-lived and algorithm-pinned; login attempts are
+  throttled in-process.
+- AI input is redacted for cookies, authorization headers, tokens, keys, passwords,
+  query values, userinfo/hosts, email, phones, cards and IPs. Target data is delimited
+  as untrusted, output is schema-validated, and AI cannot set final fields.
+- Uploads are size-capped, extension/MIME/signature checked, stored under random names,
+  and downloads resolve inside `DATA_DIR`.
+- API responses set security headers and `no-store`; `/docs` is disabled in production.
+- Production startup refuses placeholder or weak secrets.
+
+## Known limitations
+
+- Backend only; the frontend is a separate deliverable.
+- Single backend process: scan and bulk-AI progress are in memory. A restart marks
+  queued/running scans failed with `interrupted by restart`.
+- Scope is limited to Nmap and ZAP. `PROJECT_CONTEXT.md` also mentions dig, whois,
+  WhatWeb and curl; those are not part of the API contract implemented here.
+- The API contract has no evidence-file download endpoint, so uploaded files are listed
+  by name/hash; the report builder reads them from `DATA_DIR`.
+- Real Nmap/ZAP/PDF execution is verified in the Compose container; this development
+  host has neither Docker nor Nmap, and WeasyPrint's system libraries may be absent.
+
+## Layout
+
+```text
+Backend/
+  app/
+    api/v1/            thin routers
+    core/              config, logging, errors, JWT, middleware
+    db/                SQLAlchemy models and session
+    schemas/           Pydantic request/response models
+    services/          scope guard, scans, normalizer, sanitizer, AI, findings,
+                       verification, evidence, dashboard, report builder
+    templates/         report.html.j2
+  alembic/
+  scripts/seed.py
+  tests/
+docs/                  PROGRESS.md, DECISIONS.md
+docker-compose.yml
+.env.example
+```

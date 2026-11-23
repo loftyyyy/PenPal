@@ -50,3 +50,9 @@ One line per non-obvious decision: what was chosen and why.
 - If WeasyPrint fails, the report row becomes a ready HTML report with `pdf_fallback=true` and a safe error message. This keeps the HTML deliverable usable instead of losing it behind a failed PDF request.
 - The PDF renderer is a module function invoked through dependency injection in tests, so no test needs system Pango/GTK; the container remains the only place a real PDF is produced and verified.
 - Report files live in `DATA_DIR/reports/{assessment_id}/report-{id}.{ext}` with a SHA-256, and downloads resolve inside `DATA_DIR` like raw scan output.
+- The demo seed is idempotent by assessment name plus creator; it does not delete or overwrite an existing demo assessment.
+- `JWT_ALGORITHM` is a setting but is pinned to HS256 by validation rather than silently accepting `none` or an unexpected algorithm.
+- Every `/api/*` response gets `Cache-Control: no-store` and a restrictive CSP, because assessment data and evidence must not be cached by proxies or embedded by other origins.
+- ZAP health checks use the same `X-ZAP-API-Key` header as the scan client, never a query parameter.
+- OpenAPI examples live on the request schemas (`LoginRequest`, assessment/scope/scan creation, manual finding, verification, bulk AI, reports) so the frontend generates useful types and sample calls.
+- The Docker image includes the extra Pango/GLib/HarfBuzz subset libraries and package data for the Jinja report template; PDF verification remains a container task.

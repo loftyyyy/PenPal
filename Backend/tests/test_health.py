@@ -19,6 +19,8 @@ async def test_security_headers_present(client: AsyncClient) -> None:
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["x-request-id"]
+    assert response.headers["cache-control"] == "no-store"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
 async def test_unknown_route_uses_error_envelope(client: AsyncClient) -> None:

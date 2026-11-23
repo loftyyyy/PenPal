@@ -1,0 +1,17 @@
+# Keep the Docker build context small and free of local runtime data.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.egg-info/
+data/
+*.db
+*.sqlite3
+tests/
+.env
+.env.*

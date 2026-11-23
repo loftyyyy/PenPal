@@ -9,6 +9,15 @@ from app.schemas.common import EmailAddress
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "admin@penpal.local",
+                "password": "replace-with-a-real-password",
+            }
+        }
+    )
+
     email: EmailAddress
     password: str = Field(min_length=1, max_length=200)
 

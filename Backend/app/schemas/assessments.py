@@ -9,6 +9,20 @@ from app.db.enums import AssessmentStatus, FindingCategory, ScanTool, ScopeKind
 
 
 class AssessmentCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "LSRS assessment",
+                "target_name": "Love & Styles Rental System",
+                "target_base_url": "http://target:3000",
+                "owner_name": "LSRS owners",
+                "authorization_reference": "signed-authorization-letter.pdf",
+                "hosting_environment": "Docker Compose internal network",
+                "selected_categories": ["injection", "access_control"],
+            }
+        }
+    )
+
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     target_name: str = Field(min_length=1, max_length=200)
@@ -92,6 +106,12 @@ class ConfirmAuthorizationRequest(BaseModel):
 
 
 class ScopeItemCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"kind": "host", "value": "target", "in_scope": True}
+        }
+    )
+
     kind: ScopeKind
     value: str = Field(min_length=1, max_length=2048)
     in_scope: bool = True

@@ -38,6 +38,12 @@ class FindingAnalysisOut(BaseModel):
 
 
 class BulkAnalyzeRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"min_severity": "medium", "only_unanalyzed": True}
+        }
+    )
+
     min_severity: Severity | None = Field(
         default=None,
         description="Only analyze findings at or above this severity.",

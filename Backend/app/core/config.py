@@ -117,6 +117,13 @@ class Settings(BaseSettings):
             raise ValueError("AI_PROVIDER must be one of: mock, openai_compat")
         return normalized
 
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def _validate_jwt_algorithm(cls, value: str) -> str:
+        if value.strip().upper() != "HS256":
+            raise ValueError("JWT_ALGORITHM is pinned to HS256")
+        return "HS256"
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"

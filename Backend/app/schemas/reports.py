@@ -11,6 +11,8 @@ from app.db.enums import ReportFormat, ReportStatus
 
 
 class ReportCreate(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"example": {"format": "html"}})
+
     format: ReportFormat
 
 

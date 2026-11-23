@@ -2,6 +2,20 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 8: hardening and handover
+
+- Security review: secrets only from environment with production refusal, argon2 passwords, HS256 pinned by config validator, login throttling, strict Pydantic inputs, ORM/bound queries, no shell, generated-ID file paths, upload allowlists/signatures, generic error bodies, request IDs and redacting logs.
+- API responses now carry `Cache-Control: no-store` and a restrictive CSP on every `/api/*` response. ZAP health checks use the `X-ZAP-API-Key` header, so the key never appears in a URL.
+- OpenAPI reviewed: 30 paths / 38 operations, every operation has a tag and summary, and key request bodies carry examples.
+- `scripts/seed.py --demo` now creates an idempotent authorized demo assessment with scope rules, two scans, seven findings across all verification outcomes, evidence, one AI analysis, and realistic severities for dashboard/report demos. Verified against a migrated SQLite database; a second run is a no-op.
+- `README.md` completed: stack, configuration table, local tests, migrations, seeding, AI provider table, endpoint overview, end-to-end curl flow, security notes, limitations and layout.
+- Added `Backend/.dockerignore` and extra PDF runtime libraries (`libglib2.0-0`, `fontconfig`, `libharfbuzz-subset0`) to the image, plus package data for the report template.
+- Final suite: 209 passed. Coverage: overall 81%, `sanitizer` 95%, `scope_guard` 86%, `verification` 98%, `finding_normalizer` 93%.
+- App start check: OpenAPI generation (30 paths) and lifespan health check pass locally. `alembic upgrade head` and `seed.py --demo` pass against a temporary migrated SQLite database.
+- Not verified here: Docker Compose build/up, a real Nmap/ZAP scan, a real hosted AI call, and WeasyPrint PDF rendering on this Windows host (missing system Pango/GTK). Tests use fakes, a mock provider and an injected PDF renderer; the container is the deployment target for those checks.
+
+Next: handover. See `README.md`, `docs/DECISIONS.md` and the final report below.
+
 ## 2026-11-24 — Phase 7: HTML and PDF reports
 
 - `report.html.j2` covers cover, scope/authorization, methodology, executive summary, confirmed findings with evidence and remediation, Appendix A verification outcomes, Appendix B AI usage/redaction disclosure and Appendix C scan log.

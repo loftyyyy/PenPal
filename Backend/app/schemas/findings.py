@@ -66,6 +66,21 @@ class FindingDetailOut(FindingOut):
 
 
 class ManualFindingCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "title": "Business logic bypass in checkout",
+                "description": "A negative quantity increases store credit.",
+                "category": "business_logic",
+                "severity": "high",
+                "affected_url": "http://target:3000/checkout",
+                "http_method": "POST",
+                "parameter": "quantity",
+                "cwe": "CWE-840",
+            }
+        }
+    )
+
     title: str = Field(min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=10_000)
     category: FindingCategory = FindingCategory.UNCATEGORIZED
@@ -78,6 +93,17 @@ class ManualFindingCreate(BaseModel):
 
 
 class FindingVerify(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "decision": "confirmed",
+                "final_severity": "high",
+                "final_remediation": "Use parameterised queries.",
+                "reason": None,
+            }
+        }
+    )
+
     decision: VerificationDecision
     final_severity: Severity | None = None
     final_remediation: str | None = Field(default=None, max_length=20_000)

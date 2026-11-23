@@ -60,7 +60,9 @@ async def dependencies(
             DependencyStatus(name="ai_provider", ok=True, detail="mock provider configured")
         )
     elif settings.ai_provider == "openai_compat":
-        configured = bool(settings.ai_base_url and settings.ai_model)
+        configured = bool(
+            settings.ai_base_url and settings.ai_model and settings.ai_api_key
+        )
         checks.append(
             DependencyStatus(
                 name="ai_provider",
@@ -76,10 +78,12 @@ async def dependencies(
         )
 
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with httpx.AsyncClient(
+            timeout=3.0,
+            headers={"X-ZAP-API-Key": settings.zap_api_key},
+        ) as client:
             response = await client.get(
-                f"{settings.zap_base_url.rstrip('/')}/JSON/core/view/version/",
-                params={"apikey": settings.zap_api_key},
+                f"{settings.zap_base_url.rstrip('/')}/JSON/core/view/version/"
             )
             response.raise_for_status()
         checks.append(DependencyStatus(name="zap", ok=True, detail="daemon reachable"))

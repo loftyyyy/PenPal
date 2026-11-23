@@ -9,6 +9,17 @@ from app.db.enums import ScanStatus, ScanTool
 
 
 class ScanCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "tool": "zap",
+                "profile": "baseline",
+                "target": "http://target:3000/",
+                "ports": [],
+            }
+        }
+    )
+
     tool: ScanTool
     profile: str = Field(
         min_length=1,

@@ -13,9 +13,6 @@ from app.core.logging import new_request_id, request_id_var
 
 logger = logging.getLogger("penpal.request")
 
-SENSITIVE_PREFIXES = ("/api/v1/auth", "/api/v1/users", "/api/v1/findings", "/api/v1/ai")
-
-
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("x-request-id") or new_request_id()
@@ -45,8 +42,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
-        if request.url.path.startswith(
-            ("/api/v1/auth", "/api/v1/users", "/api/v1/findings", "/api/v1/ai", "/api/v1/reports")
-        ):
+        if request.url.path.startswith("/api/"):
+            # API payloads contain findings, evidence and assessment data.
             response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'none'; frame-ancestors 'none'",
+            )
         return response
