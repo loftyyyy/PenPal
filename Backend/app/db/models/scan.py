@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -35,6 +35,22 @@ class Scan(TimestampMixin, Base):
     created_by: Mapped[int] = mapped_column(
         sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+
+    @property
+    def duration_seconds(self) -> float | None:
+        if self.started_at is None or self.finished_at is None:
+            return None
+        started = self.started_at
+        finished = self.finished_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if finished.tzinfo is None:
+            finished = finished.replace(tzinfo=UTC)
+        return max(0.0, (finished - started).total_seconds())
+
+    @property
+    def has_raw_output(self) -> bool:
+        return bool(self.raw_output_path)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"Scan(id={self.id!r}, tool={self.tool!r}, status={self.status!r})"

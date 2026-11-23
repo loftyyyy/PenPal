@@ -9,13 +9,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import assessments, auth, health, scope, users
+from app.api.v1 import assessments, auth, health, recon, scans, scope, users
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.db.session import dispose_engine, get_session_factory
 from app.services.auth import bootstrap_admin
+from app.services.scan_manager import get_scan_manager, shutdown_scan_manager
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "First-admin bootstrap skipped (database not ready or migrations not run)",
                 exc_info=True,
             )
+
+    manager = None
+    try:
+        manager = get_scan_manager()
+        recovered = await manager.recover_interrupted()
+        if recovered:
+            logger.warning("Marked %d interrupted scan(s) as failed", recovered)
+    except Exception:
+        logger.warning(
+            "Scan restart recovery skipped (database not ready)", exc_info=True
+        )
+
     try:
         yield
     finally:
+        try:
+            await shutdown_scan_manager()
+        except Exception:
+            logger.warning("Scan manager shutdown failed", exc_info=True)
         await dispose_engine()
         logger.info("PenPal backend stopped")
 
@@ -97,6 +114,8 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix=settings.api_prefix)
     app.include_router(assessments.router, prefix=settings.api_prefix)
     app.include_router(scope.router, prefix=settings.api_prefix)
+    app.include_router(scans.router, prefix=settings.api_prefix)
+    app.include_router(recon.router, prefix=settings.api_prefix)
     return app
 
 

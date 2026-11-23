@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sT -T3 -F -sV --version-light -p 22,80,3000 127.0.0.1" start="1763800000" startstr="Sat Nov 22 09:06:40 2026" version="7.95" xmloutputversion="1.05">
+  <scaninfo type="connect" protocol="tcp" numservices="3" services="22,80,3000"/>
+  <host starttime="1763800000" endtime="1763800012">
+    <status state="up" reason="conn-refused" reason_ttl="0"/>
+    <address addr="127.0.0.1" addrtype="ipv4"/>
+    <hostnames>
+      <hostname name="lsrs.local" type="PTR"/>
+    </hostnames>
+    <ports>
+      <port protocol="tcp" portid="22">
+        <state state="open" reason="syn-ack" reason_ttl="64"/>
+        <service name="ssh" product="OpenSSH" version="9.2p1" extrainfo="Debian 12" method="probed" conf="10">
+          <cpe>cpe:/a:openbsd:openssh:9.2p1</cpe>
+        </service>
+      </port>
+      <port protocol="tcp" portid="80">
+        <state state="open" reason="syn-ack" reason_ttl="64"/>
+        <service name="http" product="nginx" version="1.24.0" method="probed" conf="10">
+          <cpe>cpe:/a:nginx:nginx:1.24.0</cpe>
+        </service>
+      </port>
+      <port protocol="tcp" portid="3000">
+        <state state="open" reason="syn-ack" reason_ttl="64"/>
+        <service name="http" product="Node.js Express framework" version="4.18.2" method="probed" conf="10"/>
+      </port>
+      <port protocol="tcp" portid="5432">
+        <state state="closed" reason="reset" reason_ttl="64"/>
+      </port>
+    </ports>
+    <os>
+      <osmatch name="Linux 5.0 - 5.14" accuracy="95" line="12345"/>
+    </os>
+  </host>
+  <host starttime="1763800000" endtime="1763800008">
+    <status state="up" reason="conn-refused" reason_ttl="0"/>
+    <address addr="127.0.0.2" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="6379">
+        <state state="open" reason="syn-ack" reason_ttl="64"/>
+        <service name="redis" product="Redis key-value store" version="7.2.4" method="probed" conf="10"/>
+      </port>
+    </ports>
+  </host>
+  <runstats>
+    <finished time="1763800013" timestr="Sat Nov 22 09:06:53 2026" summary="Nmap done at Sat Nov 22 09:06:53 2026; 2 IP addresses (2 hosts up) scanned in 12.84 seconds" elapsed="12.84" exit="success"/>
+    <hosts up="2" down="0" total="2"/>
+  </runstats>
+</nmaprun>

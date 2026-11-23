@@ -35,9 +35,12 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.db.base import Base
-import app.db.models  # noqa: F401
+import app.db.models
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import create_app
+from app.services.scan_manager import ScanManager, get_scan_manager
+from tests.fakes import FakeNmapRunner
 
 
 @pytest.fixture(autouse=True)
@@ -71,16 +74,37 @@ async def db(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator
 
 
 @pytest.fixture
-async def client(
+def nmap_runner() -> FakeNmapRunner:
+    return FakeNmapRunner()
+
+
+@pytest.fixture
+async def scan_manager(
     session_factory: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncClient]:
-    app = create_app()
+    nmap_runner: FakeNmapRunner,
+) -> AsyncIterator[ScanManager]:
+    manager = ScanManager(
+        session_factory, get_settings(), nmap_runner=nmap_runner, zap_runner=None
+    )
+    yield manager
+    await manager.shutdown()
+
+
+@pytest.fixture
+def app(session_factory: async_sessionmaker[AsyncSession], scan_manager: ScanManager):
+    application = create_app()
 
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
             yield session
 
-    app.dependency_overrides[get_db] = override_get_db
+    application.dependency_overrides[get_db] = override_get_db
+    application.dependency_overrides[get_scan_manager] = lambda: scan_manager
+    return application
+
+
+@pytest.fixture
+async def client(app) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as http_client:
         yield http_client

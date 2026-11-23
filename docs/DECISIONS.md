@@ -15,3 +15,8 @@ One line per non-obvious decision: what was chosen and why.
 - ZAP image pinned to `zaproxy/zap-stable:2.17.0` (current stable tag verified on Docker Hub on 2026-11-23).
 - Reports use Jinja2 autoescape; PDF rendering is attempted at generation time and failure does not destroy the HTML report.
 - All timestamps are stored in UTC with `created_at`/`updated_at` on every table; `audit_log` is append-only by contract.
+- Scan jobs are in-process `asyncio` tasks (no Celery/Redis) and the API returns `202` immediately; this assumes one backend process, which the Compose stack runs.
+- Nmap targets are stored as a bare host. An explicit port in a URL becomes the port filter so the profile cannot silently widen the scan; the scope guard re-checks that stored canonical target at execution time.
+- The one-active-scan-per-assessment limit is a DB check in the service; the single-process assumption makes the remaining request race acceptable for this project.
+- Raw evidence paths are built from generated assessment/scan IDs only, and every download resolves under `DATA_DIR`.
+- Recon merges by host address: an open observation wins over closed, service detail is filled from later scans, and an unreadable scan XML is reported per scan instead of failing the endpoint.

@@ -2,6 +2,20 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 3: scan manager and Nmap
+
+- Scan API: request (202), list with pagination, detail, cancel and raw output download; one queued/running scan per assessment (409).
+- Scan manager: in-process asyncio jobs, per-profile timeouts, Nmap concurrency semaphore, global ZAP lock, progress, cancellation, and startup recovery that fails queued/running scans with `interrupted by restart`.
+- Scope guard runs at request time and again when the job starts, using the stored canonical target.
+- Nmap runner uses fixed argv lists only (no shell, no client arguments), `-sT` profiles and host timeouts; XML is parsed with `defusedxml` behind a 50 MB cap.
+- Raw tool output stored under `DATA_DIR/evidence/{assessment_id}/{scan_id}/` with SHA-256 and tool version; downloads resolve inside `DATA_DIR`.
+- Recon endpoint aggregates completed Nmap scans by host, merges ports/services and reports per-scan parse errors.
+- Tests: Nmap XML fixture/parser (including entity-expansion rejection), scan lifecycle, authorization/scope refusal, 422 validation, one-active-scan, cancel, execution-time re-check, restart recovery, raw download, recon aggregation.
+- App start check: `create_app()` OpenAPI generation (18 paths) and lifespan health check pass locally.
+- Not verified here: a real Nmap run against the Compose dev target. This host has neither Docker nor Nmap; the runner is covered by a fake runner plus parser fixtures.
+
+Next: ZAP integration and the finding normalizer.
+
 ## 2026-11-23 — Phase 2: assessments, scope and scope guard
 
 - Assessment CRUD, authorization confirmation, archive.
