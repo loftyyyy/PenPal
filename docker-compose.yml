@@ -1,0 +1,107 @@
+# PenPal development stack.
+#
+# Only the backend is published. PostgreSQL and ZAP stay on the internal network.
+# ZAP is pinned to a stable release; check https://hub.docker.com/r/zaproxy/zap-stable
+# before bumping, and re-check the REST option names in zap_client.py.
+#
+# The `target` service is a stand-in for the Love & Styles Rental System (LSRS).
+# To assess the real LSRS copy, add its address to the assessment scope and point
+# target_base_url at it (for example http://host.docker.internal:8000); do not
+# publish or expose anything else.
+
+name: penpal
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: penpal
+      POSTGRES_PASSWORD: penpal
+      POSTGRES_DB: penpal
+    volumes:
+      - penpal_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpal -d penpal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - penpal_internal
+    # Not published. This is intentional.
+
+  backend:
+    build:
+      context: ./Backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://penpal:penpal@db:5432/penpal
+      DATA_DIR: /app/data
+      ZAP_BASE_URL: http://zap:8090
+    ports:
+      - "8000:8000"
+    volumes:
+      - penpal_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - penpal_internal
+
+  zap:
+    image: zaproxy/zap-stable:2.17.0
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8090
+      -config api.key=${ZAP_API_KEY:?set ZAP_API_KEY in .env}
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+    # No ports: ZAP is reachable only as http://zap:8090 on the internal network.
+    mem_limit: 2g
+    networks:
+      - penpal_internal
+
+  # Stand-in target for demos and manual scans. Opt in with:
+  #   docker compose --profile dev-target up --build
+  # Its address on the internal network is http://target:3000.
+  target:
+    image: bkimminich/juice-shop:v20.4.0
+    profiles: ["dev-target"]
+    mem_limit: 1g
+    networks:
+      - penpal_internal
+
+  # Optional local AI server. Opt in with:
+  #   docker compose --profile local-ai up --build
+  # Then set AI_PROVIDER=openai_compat, AI_BASE_URL=http://ollama:11434/v1,
+  # AI_MODEL=<pulled model>, AI_API_KEY=ollama (any non-empty value).
+  ollama:
+    image: ollama/ollama:0.40.17
+    profiles: ["local-ai"]
+    volumes:
+      - penpal_ollama:/root/.ollama
+    mem_limit: 4g
+    networks:
+      - penpal_internal
+
+networks:
+  penpal_internal:
+    driver: bridge
+
+volumes:
+  penpal_db:
+  penpal_data:
+  penpal_ollama:
