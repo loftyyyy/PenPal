@@ -20,3 +20,11 @@ One line per non-obvious decision: what was chosen and why.
 - The one-active-scan-per-assessment limit is a DB check in the service; the single-process assumption makes the remaining request race acceptable for this project.
 - Raw evidence paths are built from generated assessment/scan IDs only, and every download resolves under `DATA_DIR`.
 - Recon merges by host address: an open observation wins over closed, service detail is filled from later scans, and an unreadable scan XML is reported per scan instead of failing the endpoint.
+- ZAP gets the scope guard's include/exclude regexes directly as its context, so spider and active scans cannot leave the authorized URL space even if a link points outside.
+- ZAP authentication uses the `X-ZAP-API-Key` header instead of the `apikey` query parameter, keeping the key out of URLs and access logs.
+- One ZAP scan at a time (global lock): ZAP's session is shared, so parallel contexts would race; the Nmap semaphore stays separate.
+- The raw ZAP artifact is a bounded PenPal wrapper around the alert list, not the daemon's full session export. It keeps the fields the report and reviewer need without unbounded history.
+- ZAP alert fingerprints use plugin id, HTTP method, normalized URL (query and fragment removed) and parameter name. This intentionally collapses repeated payloads of the same issue on one endpoint.
+- Tool output never sets verification state, final severity or final remediation. A re-scan updates tool fields and `seen_count` but leaves assessor and AI fields untouched.
+- Nmap findings are limited to notable exposed admin/database services and disclosed service versions; other open ports stay in recon rather than becoming finding noise.
+- ZAP profile `active_limited` is conservative by config: one thread per host, one minute per rule, 30-minute scan cap and ten alerts per rule.

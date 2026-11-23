@@ -1,0 +1,9 @@
+{
+  "id": "101",
+  "requestHeader": "GET /rest/products/search?q=test HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nAccept: application/json\r\n\r\n",
+  "requestBody": "",
+  "responseHeader": "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 42\r\n\r\n",
+  "responseBody": "{\"error\":\"SQLITE_ERROR: near \\\"test\\\": syntax error\"}",
+  "cookieParams": "",
+  "note": ""
+}

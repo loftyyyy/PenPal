@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     zap_base_url: str = "http://zap:8090"
     zap_api_key: str = "CHANGE_ME-zap-api-key"
     zap_timeout_seconds: int = 30
+    zap_poll_interval_seconds: float = 2.0
+    zap_alert_page_size: int = 200
+    zap_max_alerts: int = 1000
+    zap_max_message_fetches: int = 100
+    zap_message_max_chars: int = 20_000
+    zap_active_threads_per_host: int = 1
+    zap_active_max_rule_minutes: int = 1
+    zap_active_max_scan_minutes: int = 30
+    zap_active_max_alerts_per_rule: int = 10
 
     allowed_target_networks: str = DEFAULT_ALLOWED_NETWORKS
     allow_public_targets: bool = False

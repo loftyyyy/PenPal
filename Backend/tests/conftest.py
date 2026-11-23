@@ -40,7 +40,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import create_app
 from app.services.scan_manager import ScanManager, get_scan_manager
-from tests.fakes import FakeNmapRunner
+from tests.fakes import FakeNmapRunner, FakeZapRunner
 
 
 @pytest.fixture(autouse=True)
@@ -79,12 +79,21 @@ def nmap_runner() -> FakeNmapRunner:
 
 
 @pytest.fixture
+def zap_runner() -> FakeZapRunner:
+    return FakeZapRunner()
+
+
+@pytest.fixture
 async def scan_manager(
     session_factory: async_sessionmaker[AsyncSession],
     nmap_runner: FakeNmapRunner,
+    zap_runner: FakeZapRunner,
 ) -> AsyncIterator[ScanManager]:
     manager = ScanManager(
-        session_factory, get_settings(), nmap_runner=nmap_runner, zap_runner=None
+        session_factory,
+        get_settings(),
+        nmap_runner=nmap_runner,
+        zap_runner=zap_runner,
     )
     yield manager
     await manager.shutdown()

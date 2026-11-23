@@ -2,6 +2,19 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Phase 4: ZAP integration and finding normalizer
+
+- `ZapClient` wraps only the REST calls PenPal needs (`core`, `context`, `spider`, `pscan`, `ascan`, `alert`); the API key travels in `X-ZAP-API-Key`, never in a URL.
+- `ZapScanRunner`: new session/context, scope-derived include/exclude regexes, spider, passive-scan drain, optional bounded active scan, alert pagination and sampled HTTP messages. Context is removed and the client closed even after failure or cancellation.
+- Raw ZAP evidence is a PenPal wrapper document (`tool`, `version`, `profile`, `target`, `context`, `counts`, `alerts`) stored as `zap.json` with SHA-256; message bodies are truncated to the configured limit.
+- Finding normalizer maps ZAP alerts by plugin id, CWE and tags to PenPal categories/OWASP, and Nmap notable services/versions to findings. Fingerprints strip URL queries so re-scans update rows instead of duplicating them.
+- Re-scans preserve verification state, final severity, final remediation and AI suggestions; they update tool fields and bump `seen_count`. HTTP exchanges become `http_exchange` evidence, deduped by SHA-256 per finding.
+- Scan manager parses and normalizes both tools after completion; a ZAP parse failure stores raw output and fails the scan with a safe message, while a ZAP client error fails the scan without a traceback leak.
+- Tests: ZAP client headers/endpoints/retries/errors, runner baseline/active/order/cancel/timeout/pagination/truncation, fingerprint and mapping tables, Nmap and ZAP upsert, evidence dedupe, API end-to-end ZAP scan and re-scan.
+- Not verified here: a real ZAP scan against the Compose dev target. This host has no Docker; ZAP is covered by a scripted client plus recorded alert/message fixtures.
+
+Next: sanitizer and the AI layer.
+
 ## 2026-11-24 — Phase 3: scan manager and Nmap
 
 - Scan API: request (202), list with pagination, detail, cancel and raw output download; one queued/running scan per assessment (409).

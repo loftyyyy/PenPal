@@ -25,6 +25,12 @@ from app.db.enums import (
 )
 from app.db.models import Assessment, Scan, ScopeItem
 from app.services import audit
+from app.services.finding_normalizer import (
+    ZapParseError,
+    normalize_nmap_result,
+    normalize_zap_result,
+    parse_zap_document,
+)
 from app.services.nmap_parser import NmapParseError, NmapResult, parse_nmap_xml
 from app.services.nmap_runner import (
     NmapRunError,
@@ -34,6 +40,7 @@ from app.services.nmap_runner import (
 )
 from app.services.scope_guard import ScopeGuard
 from app.services.storage import sha256_bytes, write_data_file
+from app.services.zap_client import ZapError
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,19 @@ class RawOutput:
     data: bytes
     filename: str
     tool_version: str | None = None
+
+
+def _risk_count(alerts: Any, risk: str) -> int:
+    if not isinstance(alerts, list):
+        return 0
+    count = 0
+    for alert in alerts:
+        if not isinstance(alert, dict):
+            continue
+        value = str(alert.get("risk") or "").strip().lower()
+        if (risk == "info" and value not in {"high", "medium", "low"}) or value == risk:
+            count += 1
+    return count
 
 
 class NmapRunnerProtocol:
@@ -257,6 +277,7 @@ class ScanManager:
             tool_version = raw.tool_version
             parse_summary: dict[str, Any] | None = None
             parsed: NmapResult | None = None
+            document: dict[str, Any] | None = None
             if scan.tool == ScanTool.NMAP:
                 try:
                     parsed = await asyncio.to_thread(parse_nmap_xml, raw.data)
@@ -275,6 +296,22 @@ class ScanManager:
                     ),
                     "elapsed_seconds": parsed.elapsed_seconds,
                 }
+            elif scan.tool == ScanTool.ZAP:
+                try:
+                    document = await asyncio.to_thread(parse_zap_document, raw.data)
+                except ZapParseError as exc:
+                    await self._store_raw(scan_id, relative_path, digest)
+                    await self._finish_failed(scan_id, f"ZAP JSON parse failed: {exc}")
+                    return
+                tool_version = str(document.get("version") or tool_version or "unknown")
+                alerts = document.get("alerts") or []
+                parse_summary = {
+                    "alerts": len(alerts),
+                    "high": _risk_count(alerts, "high"),
+                    "medium": _risk_count(alerts, "medium"),
+                    "low": _risk_count(alerts, "low"),
+                    "info": _risk_count(alerts, "info"),
+                }
 
             await self._mark_completed(
                 scan_id,
@@ -283,31 +320,7 @@ class ScanManager:
                 tool_version=tool_version,
                 parse_summary=parse_summary,
             )
-            if scan.tool == ScanTool.NMAP and parsed is not None:
-                try:
-                    from app.services.finding_normalizer import normalize_nmap_result
-                except ImportError:  # pragma: no cover - lands in phase 4
-                    logger.debug(
-                        "Finding normaliser not available yet; scan %s stored without findings",
-                        scan_id,
-                    )
-                else:
-                    try:
-                        async with self.session_factory() as db:
-                            fresh = await db.get(Scan, scan_id)
-                            if fresh is not None:
-                                counts = await normalize_nmap_result(db, fresh, parsed)
-                                await db.commit()
-                                if counts:
-                                    logger.info(
-                                        "Nmap scan %s upserted %s finding(s)",
-                                        scan_id,
-                                        counts,
-                                    )
-                    except Exception:
-                        logger.exception(
-                            "Finding normalisation failed for scan %s", scan_id
-                        )
+            await self._normalize_findings(scan_id, parsed=parsed, document=document)
             async with self.session_factory() as db:
                 fresh = await db.get(Scan, scan_id)
                 if fresh is not None:
@@ -327,6 +340,8 @@ class ScanManager:
         except ScanTimeout as exc:
             await self._finish_failed(scan_id, str(exc))
         except NmapRunError as exc:
+            await self._finish_failed(scan_id, str(exc))
+        except ZapError as exc:
             await self._finish_failed(scan_id, str(exc))
         except asyncio.CancelledError:
             await self._finish_cancelled(scan_id)
@@ -408,6 +423,35 @@ class ScanManager:
             scan.parameters = parameters
             await db.commit()
 
+    async def _normalize_findings(
+        self,
+        scan_id: int,
+        *,
+        parsed: NmapResult | None,
+        document: dict[str, Any] | None,
+    ) -> None:
+        if parsed is None and document is None:
+            return
+        try:
+            async with self.session_factory() as db:
+                fresh = await db.get(Scan, scan_id)
+                if fresh is None or fresh.status != ScanStatus.COMPLETED:
+                    return
+                if parsed is not None:
+                    counts = await normalize_nmap_result(db, fresh, parsed)
+                else:
+                    counts = await normalize_zap_result(db, fresh, document or {})
+                await db.commit()
+                if counts:
+                    logger.info(
+                        "%s scan %s upserted %s finding(s)",
+                        fresh.tool,
+                        scan_id,
+                        counts,
+                    )
+        except Exception:
+            logger.exception("Finding normalisation failed for scan %s", scan_id)
+
     async def _finish_failed(self, scan_id: int, message: str) -> None:
         async with self.session_factory() as db:
             scan = await db.get(Scan, scan_id)
@@ -447,17 +491,11 @@ def get_scan_manager() -> ScanManager:
     global _manager
     if _manager is None:
         from app.db.session import get_session_factory
+        from app.services.zap_runner import ZapScanRunner
 
         settings = get_settings()
-        zap_runner = None
-        try:
-            from app.services.zap_runner import ZapScanRunner
-
-            zap_runner = ZapScanRunner(settings)
-        except ImportError:  # pragma: no cover - ZAP layer lands in phase 4
-            zap_runner = None
         _manager = ScanManager(
-            get_session_factory(), settings, zap_runner=zap_runner
+            get_session_factory(), settings, zap_runner=ZapScanRunner(settings)
         )
     return _manager
 

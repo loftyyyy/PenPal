@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from app.db.enums import NmapProfile, ScanStatus, ScanTool, ScopeKind
-from app.db.models import AuditLog, Scan, ScopeItem
+from app.db.models import AuditLog, Evidence, Finding, Scan, ScopeItem
 from app.services.scan_manager import ScanManager
+from app.services.zap_client import ZapError
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.fakes import NMAP_FIXTURE, FakeNmapRunner
+from tests.fakes import NMAP_FIXTURE, FakeNmapRunner, FakeZapRunner
 from tests.utils import add_scope, create_assessment, create_user, login_headers
 
 
@@ -106,6 +108,11 @@ async def test_scan_lifecycle_raw_download_and_audit(
         await db.execute(select(AuditLog.action).where(AuditLog.action.like("scan.%")))
     ).scalars()
     assert {"scan.requested", "scan.started", "scan.completed"} <= set(actions)
+
+    finding_count = await db.scalar(
+        select(func.count(Finding.id)).where(Finding.assessment_id == assessment.id)
+    )
+    assert finding_count == 6
 
 
 async def test_scan_refused_when_authorization_missing(
@@ -363,6 +370,160 @@ async def test_raw_download_missing_and_unknown_scan(
 
     unknown = await client.get("/api/v1/scans/9999", headers=headers)
     assert unknown.status_code == 404
+
+
+def _zap_payload(**overrides):
+    payload = {
+        "tool": "zap",
+        "profile": "baseline",
+        "target": "http://127.0.0.1:3000/",
+        "ports": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+async def test_zap_scan_normalizes_findings_and_rescan_does_not_duplicate(
+    client: AsyncClient,
+    db: AsyncSession,
+    scan_manager: ScanManager,
+    zap_runner: FakeZapRunner,
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    base = f"/api/v1/assessments/{assessment.id}/scans"
+
+    first = await client.post(base, headers=headers, json=_zap_payload())
+    assert first.status_code == 202, first.text
+    first_id = first.json()["scan_id"]
+    await scan_manager.wait(first_id)
+
+    detail = await client.get(f"/api/v1/scans/{first_id}", headers=headers)
+    assert detail.status_code == 200, detail.text
+    scan = detail.json()
+    assert scan["status"] == "completed"
+    assert scan["tool"] == "zap"
+    assert scan["profile"] == "baseline"
+    assert scan["target"] == "http://127.0.0.1:3000/"
+    assert scan["tool_version"] == "2.17.0"
+    assert scan["has_raw_output"] is True
+    assert scan["parameters"]["raw_filename"] == "zap.json"
+    assert scan["parameters"]["result_summary"] == {
+        "alerts": 5,
+        "high": 2,
+        "medium": 1,
+        "low": 1,
+        "info": 1,
+    }
+
+    raw = await client.get(f"/api/v1/scans/{first_id}/raw", headers=headers)
+    assert raw.status_code == 200
+    assert raw.headers["content-type"].startswith("application/json")
+    document = json.loads(raw.content)
+    assert document["tool"] == "zap"
+    assert len(document["alerts"]) == 5
+
+    call = zap_runner.calls[0]
+    assert call["profile"] == "baseline"
+    assert call["target"] == "http://127.0.0.1:3000/"
+    assert call["context_include"], "scope guard must give ZAP an include pattern"
+    assert isinstance(call["context_exclude"], list)
+
+    findings = (
+        (await db.execute(select(Finding).where(Finding.assessment_id == assessment.id)))
+        .scalars()
+        .all()
+    )
+    assert len(findings) == 4
+    assert {str(finding.source) for finding in findings} == {"zap"}
+    assert {finding.verification_status for finding in findings} == {"pending"}
+
+    evidence_count = await db.scalar(
+        select(func.count(Evidence.id)).where(Evidence.scan_id == first_id)
+    )
+    assert evidence_count == 3
+
+    second = await client.post(base, headers=headers, json=_zap_payload())
+    assert second.status_code == 202, second.text
+    second_id = second.json()["scan_id"]
+    await scan_manager.wait(second_id)
+
+    total = await db.scalar(
+        select(func.count(Finding.id)).where(Finding.assessment_id == assessment.id)
+    )
+    assert total == 4
+    seen = (
+        (await db.execute(select(Finding.seen_count).where(Finding.assessment_id == assessment.id)))
+        .scalars()
+        .all()
+    )
+    assert set(seen) == {2}
+
+    actions = (
+        (
+            await db.execute(
+                select(AuditLog.action).where(AuditLog.action.like("scan.%"))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert list(actions).count("scan.completed") == 2
+
+
+async def test_zap_client_error_marks_scan_failed(
+    client: AsyncClient,
+    db: AsyncSession,
+    scan_manager: ScanManager,
+    zap_runner: FakeZapRunner,
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    zap_runner.error = ZapError("ZAP unreachable after 3 attempts")
+
+    response = await client.post(
+        f"/api/v1/assessments/{assessment.id}/scans",
+        headers=headers,
+        json=_zap_payload(),
+    )
+    assert response.status_code == 202
+    scan_id = response.json()["scan_id"]
+    await scan_manager.wait(scan_id)
+
+    detail = await client.get(f"/api/v1/scans/{scan_id}", headers=headers)
+    assert detail.json()["status"] == "failed"
+    assert detail.json()["error"] == "ZAP unreachable after 3 attempts"
+
+
+async def test_unparsable_zap_output_still_stores_raw_evidence(
+    client: AsyncClient,
+    db: AsyncSession,
+    scan_manager: ScanManager,
+    zap_runner: FakeZapRunner,
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    zap_runner.raw_document = b"{not json"
+
+    response = await client.post(
+        f"/api/v1/assessments/{assessment.id}/scans",
+        headers=headers,
+        json=_zap_payload(),
+    )
+    assert response.status_code == 202
+    scan_id = response.json()["scan_id"]
+    await scan_manager.wait(scan_id)
+
+    detail = await client.get(f"/api/v1/scans/{scan_id}", headers=headers)
+    body = detail.json()
+    assert body["status"] == "failed"
+    assert body["error"].startswith("ZAP JSON parse failed")
+    assert body["has_raw_output"] is True
+
+    scan_row = await db.get(Scan, scan_id)
+    assert scan_row is not None
+    assert scan_row.raw_output_sha256 is not None
+    finding_count = await db.scalar(
+        select(func.count(Finding.id)).where(Finding.assessment_id == assessment.id)
+    )
+    assert finding_count == 0
 
 
 async def test_recon_aggregates_completed_scans(
