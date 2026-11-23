@@ -9,12 +9,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import health
+from app.api.v1 import auth, health, users
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
-from app.db.session import dispose_engine
+from app.db.session import dispose_engine, get_session_factory
+from app.services.auth import bootstrap_admin
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.validate_for_startup()
     _ensure_data_dirs()
     logger.info("PenPal backend starting (env=%s)", settings.env)
+    if settings.first_admin_email and settings.first_admin_password:
+        try:
+            factory = get_session_factory()
+            async with factory() as db:
+                await bootstrap_admin(db, settings)
+        except Exception:
+            logger.warning(
+                "First-admin bootstrap skipped (database not ready or migrations not run)",
+                exc_info=True,
+            )
     try:
         yield
     finally:
@@ -82,6 +93,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix=settings.api_prefix)
+    app.include_router(auth.router, prefix=settings.api_prefix)
+    app.include_router(users.router, prefix=settings.api_prefix)
     return app
 
 

@@ -60,8 +60,8 @@ async def get_assessment_or_404(db: AsyncSession, assessment_id: int) -> Assessm
 class Pagination:
     def __init__(
         self,
-        page: Annotated[int, Query(ge=1, description="1-based page number")] = 1,
-        page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+        page: int = Query(1, ge=1, description="1-based page number"),
+        page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     ) -> None:
         self.page = page
         self.page_size = page_size

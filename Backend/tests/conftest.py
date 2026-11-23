@@ -40,6 +40,13 @@ from app.db.session import get_db
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_limiter() -> None:
+    from app.services.auth import login_limiter
+
+    login_limiter._attempts.clear()
+
+
 @pytest.fixture
 async def engine(tmp_path: Path) -> AsyncIterator[AsyncEngine]:
     url = f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
