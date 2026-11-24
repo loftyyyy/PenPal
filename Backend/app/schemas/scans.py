@@ -24,12 +24,18 @@ class ScanCreate(BaseModel):
     profile: str = Field(
         min_length=1,
         max_length=50,
-        description="Nmap: quick, standard, full_tcp. ZAP: baseline, active_limited.",
+        description=(
+            "Nmap: quick, standard, full_tcp. ZAP: baseline, active_limited. "
+            "dig, whois, whatweb and curl: default."
+        ),
     )
     target: str = Field(
         min_length=1,
         max_length=2048,
-        description="Host or IP for Nmap; absolute http(s) URL for ZAP.",
+        description=(
+            "Host or IP for Nmap, dig and whois; absolute http(s) URL for ZAP, "
+            "whatweb and curl."
+        ),
     )
     ports: list[int] = Field(
         default_factory=list,

@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from app.db.enums import NmapProfile
+from app.db.enums import NmapProfile, ScanTool
 from app.services.ai.base import AIProvider, ProviderResult
+from app.services.external_runner import ExternalRunResult
 from app.services.nmap_runner import NmapRunResult, ScanCancelled
 from app.services.scan_manager import RawOutput
 
@@ -72,6 +73,70 @@ class FakeNmapRunner:
 
 def load_zap_alerts() -> list[dict[str, Any]]:
     return json.loads(ZAP_ALERTS_FIXTURE.read_text(encoding="utf-8"))
+
+
+DEFAULT_EXTERNAL_OUTPUTS = {
+    ScanTool.DIG: b"; A\n93.184.216.34\n; AAAA\n2001:db8::1\n",
+    ScanTool.WHOIS: b"Registrar: Example Registrar\nCreation Date: 2020-01-01\n",
+    ScanTool.WHATWEB: (
+        b'[{"target":"http://127.0.0.1:3000/","http_status":200,'
+        b'"plugins":{"HTTPServer":{"version":["nginx/1.24.0"]},'
+        b'"Title":{"string":["Demo"]}}}]'
+    ),
+    ScanTool.CURL: (
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\n\r\nhello"
+    ),
+}
+
+
+@dataclass
+class FakeExternalRunner:
+    outputs: dict[ScanTool, bytes] = field(
+        default_factory=lambda: dict(DEFAULT_EXTERNAL_OUTPUTS)
+    )
+    gate: asyncio.Event | None = None
+    error: Exception | None = None
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    started: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def run(
+        self,
+        *,
+        tool: ScanTool,
+        target: str,
+        timeout_seconds: int,
+        cancel_event: asyncio.Event,
+    ) -> ExternalRunResult:
+        self.calls.append(
+            {
+                "tool": tool,
+                "target": target,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        self.started.set()
+        if self.error is not None:
+            raise self.error
+        if self.gate is not None:
+            gate_waiter = asyncio.create_task(self.gate.wait())
+            cancel_waiter = asyncio.create_task(cancel_event.wait())
+            try:
+                await asyncio.wait(
+                    {gate_waiter, cancel_waiter},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                gate_waiter.cancel()
+                cancel_waiter.cancel()
+        if cancel_event.is_set():
+            raise ScanCancelled("scan cancelled")
+        filename = "whatweb.json" if tool == ScanTool.WHATWEB else f"{tool.value}.txt"
+        return ExternalRunResult(
+            raw=self.outputs[tool],
+            filename=filename,
+            argv=[tool.value, target],
+            return_code=0,
+        )
 
 
 class ScriptedProvider(AIProvider):

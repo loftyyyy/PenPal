@@ -23,7 +23,12 @@ from app.services.scope_guard import ScopeGuard, TargetError, normalize_target
 PROFILES: dict[ScanTool, set[str]] = {
     ScanTool.NMAP: {profile.value for profile in NmapProfile},
     ScanTool.ZAP: {profile.value for profile in ZapProfile},
+    ScanTool.DIG: {"default"},
+    ScanTool.WHOIS: {"default"},
+    ScanTool.WHATWEB: {"default"},
+    ScanTool.CURL: {"default"},
 }
+URL_TOOLS = {ScanTool.ZAP, ScanTool.WHATWEB, ScanTool.CURL}
 ACTIVE_STATUSES = (ScanStatus.QUEUED, ScanStatus.RUNNING)
 
 
@@ -70,9 +75,13 @@ def canonical_target(
             if explicit_port is not None:
                 ports = [explicit_port]
         return normalized.host, ports
+    if tool in {ScanTool.DIG, ScanTool.WHOIS}:
+        if normalized.url is not None:
+            raise _invalid(f"{tool.value} targets must be a host or IP, not a URL")
+        return normalized.host, ports
 
     if normalized.url is None:
-        raise _invalid("ZAP targets must be absolute http(s) URLs")
+        raise _invalid(f"{tool.value} targets must be absolute http(s) URLs")
     return normalized.url, ports
 
 

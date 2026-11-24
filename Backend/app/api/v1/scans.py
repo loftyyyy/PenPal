@@ -155,7 +155,11 @@ async def download_raw_output(
         raise NotFoundError("Raw output", scan_id) from exc
     if not path.is_file():
         raise NotFoundError("Raw output", scan_id)
-    media_type = "application/xml" if scan.tool == ScanTool.NMAP else "application/json"
+    media_type = {
+        ".xml": "application/xml",
+        ".json": "application/json",
+        ".txt": "text/plain",
+    }.get(Path(scan.raw_output_path).suffix.lower(), "application/octet-stream")
     return FileResponse(
         path,
         media_type=media_type,

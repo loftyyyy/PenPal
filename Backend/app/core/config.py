@@ -78,12 +78,20 @@ class Settings(BaseSettings):
 
     nmap_binary: str = "nmap"
     nmap_max_concurrency: int = 1
+    dig_binary: str = "dig"
+    whois_binary: str = "whois"
+    whatweb_binary: str = "whatweb"
+    curl_binary: str = "curl"
 
     scan_timeout_quick_seconds: int = 600
     scan_timeout_standard_seconds: int = 1800
     scan_timeout_full_tcp_seconds: int = 7200
     scan_timeout_zap_baseline_seconds: int = 1800
     scan_timeout_zap_active_seconds: int = 3600
+    scan_timeout_dig_default_seconds: int = 120
+    scan_timeout_whois_default_seconds: int = 120
+    scan_timeout_whatweb_default_seconds: int = 300
+    scan_timeout_curl_default_seconds: int = 120
 
     ai_provider: str = "mock"
     ai_base_url: str = ""

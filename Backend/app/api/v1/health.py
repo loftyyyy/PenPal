@@ -46,14 +46,23 @@ async def dependencies(
     except Exception:
         checks.append(DependencyStatus(name="database", ok=False, detail="unreachable"))
 
-    nmap_path = shutil.which(settings.nmap_binary)
-    checks.append(
-        DependencyStatus(
-            name="nmap",
-            ok=nmap_path is not None,
-            detail="binary present" if nmap_path else "binary not found on PATH",
+    for name, binary in (
+        ("nmap", settings.nmap_binary),
+        ("dig", settings.dig_binary),
+        ("whois", settings.whois_binary),
+        ("whatweb", settings.whatweb_binary),
+        ("curl", settings.curl_binary),
+    ):
+        path = shutil.which(binary)
+        checks.append(
+            DependencyStatus(
+                name=name,
+                ok=path is not None,
+                detail="binary present"
+                if path
+                else "binary not found on PATH",
+            )
         )
-    )
 
     if settings.ai_provider == "mock":
         checks.append(

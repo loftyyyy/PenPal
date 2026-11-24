@@ -13,12 +13,16 @@ from app.db.base import utcnow
 from app.db.enums import ScanStatus, ScanTool
 from app.db.models import Assessment, Scan
 from app.schemas.recon import (
+    ReconDNSOut,
     ReconHostOut,
+    ReconHTTPOut,
     ReconOut,
     ReconPortOut,
     ReconScanOut,
     ReconServiceOut,
+    ReconTechnologyOut,
     ReconTotalsOut,
+    ReconWhoisOut,
 )
 from app.services.nmap_parser import NmapHost, NmapParseError, NmapPort, parse_nmap_xml
 from app.services.storage import UnsafePathError, read_data_file
@@ -112,7 +116,6 @@ async def build_recon(
         select(Scan)
         .where(
             Scan.assessment_id == assessment.id,
-            Scan.tool == ScanTool.NMAP,
             Scan.status == ScanStatus.COMPLETED,
         )
         .order_by(Scan.id)
@@ -121,24 +124,71 @@ async def build_recon(
 
     hosts: dict[str, ReconHostOut] = {}
     scan_rows: list[ReconScanOut] = []
+    dns_rows: list[ReconDNSOut] = []
+    whois_rows: list[ReconWhoisOut] = []
+    technology_rows: list[ReconTechnologyOut] = []
+    http_rows: list[ReconHTTPOut] = []
     for scan in scans:
         parse_error: str | None = None
-        if scan.raw_output_path:
-            try:
-                data = await asyncio.to_thread(
-                    read_data_file,
-                    settings,
-                    scan.raw_output_path,
-                    MAX_RECON_XML_BYTES,
-                )
-                parsed = await asyncio.to_thread(parse_nmap_xml, data)
-            except (UnsafePathError, OSError, NmapParseError) as exc:
-                parse_error = str(exc)
+        summary = (scan.parameters or {}).get("result_summary") or {}
+        if scan.tool == ScanTool.NMAP:
+            if scan.raw_output_path:
+                try:
+                    data = await asyncio.to_thread(
+                        read_data_file,
+                        settings,
+                        scan.raw_output_path,
+                        MAX_RECON_XML_BYTES,
+                    )
+                    parsed = await asyncio.to_thread(parse_nmap_xml, data)
+                except (UnsafePathError, OSError, NmapParseError) as exc:
+                    parse_error = str(exc)
+                else:
+                    for host in parsed.hosts:
+                        _merge_host(hosts, host, scan.id)
             else:
-                for host in parsed.hosts:
-                    _merge_host(hosts, host, scan.id)
-        else:
-            parse_error = "raw Nmap XML was not stored"
+                parse_error = "raw Nmap XML was not stored"
+        elif scan.tool == ScanTool.DIG:
+            dns_rows.append(
+                ReconDNSOut(
+                    scan_id=scan.id,
+                    target=scan.target,
+                    records=summary.get("records", {}),
+                    record_count=int(summary.get("record_count", 0)),
+                )
+            )
+        elif scan.tool == ScanTool.WHOIS:
+            whois_rows.append(
+                ReconWhoisOut(
+                    scan_id=scan.id,
+                    target=scan.target,
+                    skipped=bool(summary.get("skipped", False)),
+                    note=summary.get("note"),
+                    fields=summary.get("fields", {}),
+                )
+            )
+        elif scan.tool == ScanTool.WHATWEB:
+            technology_rows.append(
+                ReconTechnologyOut(
+                    scan_id=scan.id,
+                    target=scan.target,
+                    status_code=summary.get("status_code"),
+                    targets=summary.get("targets", []),
+                    technologies=summary.get("technologies", {}),
+                )
+            )
+        elif scan.tool == ScanTool.CURL:
+            http_rows.append(
+                ReconHTTPOut(
+                    scan_id=scan.id,
+                    target=scan.target,
+                    status_code=summary.get("status_code"),
+                    content_type=summary.get("content_type"),
+                    header_count=int(summary.get("header_count", 0)),
+                    body_bytes=int(summary.get("body_bytes", 0)),
+                    location=summary.get("location"),
+                )
+            )
 
         scan_rows.append(
             ReconScanOut(
@@ -179,4 +229,8 @@ async def build_recon(
         ),
         scans=scan_rows,
         hosts=host_rows,
+        dns=dns_rows,
+        whois=whois_rows,
+        technologies=technology_rows,
+        http=http_rows,
     )

@@ -30,6 +30,27 @@ from app.services.nmap_parser import NmapPort, NmapResult
 logger = logging.getLogger(__name__)
 
 MAX_ZAP_JSON_BYTES = 50 * 1024 * 1024
+MAX_WHATWEB_JSON_BYTES = 10 * 1024 * 1024
+
+WHATWEB_VERSION_PLUGINS = {
+    "HTTPServer",
+    "X-Powered-By",
+    "PHP",
+    "WordPress",
+    "nginx",
+    "Apache",
+    "IIS",
+    "Express",
+    "Django",
+    "Rails",
+    "Laravel",
+    "jQuery",
+    "Bootstrap",
+    "React",
+    "Vue.js",
+    "ASP.NET",
+    "Tomcat",
+}
 
 DATABASE_PORTS = {
     1433: "Microsoft SQL Server",
@@ -176,6 +197,38 @@ def parse_zap_document(data: bytes) -> dict[str, Any]:
     if alerts is not None and not isinstance(alerts, list):
         raise ZapParseError("ZAP JSON alerts is not a list")
     return document
+
+
+class WhatWebParseError(ValueError):
+    pass
+
+
+def parse_whatweb_document(data: bytes) -> list[dict[str, Any]]:
+    if not data or len(data) > MAX_WHATWEB_JSON_BYTES:
+        raise WhatWebParseError("WhatWeb JSON is empty or larger than the 10 MB limit")
+    try:
+        document = json.loads(data)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise WhatWebParseError(f"invalid WhatWeb JSON: {exc}") from exc
+    if isinstance(document, dict):
+        document = document.get("results", [])
+    if not isinstance(document, list):
+        raise WhatWebParseError("WhatWeb JSON root is not a list")
+    return [entry for entry in document if isinstance(entry, dict)]
+
+
+def _whatweb_versions(details: Any) -> list[str]:
+    versions: list[str] = []
+    if isinstance(details, dict):
+        for key in ("version", "string"):
+            values = details.get(key)
+            if isinstance(values, list):
+                versions.extend(str(value) for value in values)
+            elif isinstance(values, str):
+                versions.append(values)
+    elif isinstance(details, list):
+        versions.extend(str(value) for value in details)
+    return sorted({value.strip() for value in versions if value.strip()})
 
 
 def normalize_url_for_fingerprint(value: str | None) -> str:
@@ -500,6 +553,61 @@ async def normalize_nmap_result(
                 created += int(was_created)
                 updated += int(not was_created)
 
+    return {"created": created, "updated": updated, "total": created + updated}
+
+
+async def normalize_whatweb_result(
+    db: AsyncSession, scan: Scan, entries: list[dict[str, Any]]
+) -> dict[str, int]:
+    created = 0
+    updated = 0
+    seen: set[str] = set()
+    for entry in entries:
+        target = str(entry.get("target") or scan.target)
+        plugins = entry.get("plugins")
+        if not isinstance(plugins, dict):
+            continue
+        for plugin, details in plugins.items():
+            if plugin not in WHATWEB_VERSION_PLUGINS:
+                continue
+            versions = _whatweb_versions(details)
+            if not versions:
+                continue
+            version_text = ", ".join(versions)
+            digest = fingerprint(
+                FindingSource.WHATWEB.value,
+                f"version:{plugin}:{version_text}",
+                "GET",
+                target,
+                None,
+            )
+            if digest in seen:
+                continue
+            seen.add(digest)
+            finding, was_created = await _upsert_finding(
+                db,
+                scan,
+                source=FindingSource.WHATWEB,
+                rule_id=f"version:{plugin}:{version_text}",
+                title=f"{plugin} version disclosed by WhatWeb",
+                description=(
+                    f"WhatWeb identified {plugin} {version_text} at {target}. "
+                    "Remove or minimize version banners where practical."
+                ),
+                category=FindingCategory.INFORMATION_DISCLOSURE,
+                owasp_category=OWASP_BY_CATEGORY[
+                    FindingCategory.INFORMATION_DISCLOSURE
+                ],
+                cwe="CWE-200",
+                affected_url=target,
+                method="GET",
+                parameter=None,
+                severity=Severity.INFO,
+                confidence="WhatWeb",
+                raw={"target": target, "plugin": plugin, "details": details},
+            )
+            created += int(was_created)
+            updated += int(not was_created)
     return {"created": created, "updated": updated, "total": created + updated}
 
 

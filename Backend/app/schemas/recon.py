@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ReconServiceOut(BaseModel):
@@ -53,9 +53,46 @@ class ReconTotalsOut(BaseModel):
     open_ports: int
 
 
+class ReconDNSOut(BaseModel):
+    scan_id: int
+    target: str
+    records: dict[str, list[str]]
+    record_count: int
+
+
+class ReconWhoisOut(BaseModel):
+    scan_id: int
+    target: str
+    skipped: bool
+    note: str | None = None
+    fields: dict[str, str]
+
+
+class ReconTechnologyOut(BaseModel):
+    scan_id: int
+    target: str
+    status_code: int | None = None
+    targets: list[str]
+    technologies: dict[str, list[str]]
+
+
+class ReconHTTPOut(BaseModel):
+    scan_id: int
+    target: str
+    status_code: int | None = None
+    content_type: str | None = None
+    header_count: int = 0
+    body_bytes: int = 0
+    location: str | None = None
+
+
 class ReconOut(BaseModel):
     assessment_id: int
     generated_at: datetime
     totals: ReconTotalsOut
     scans: list[ReconScanOut]
     hosts: list[ReconHostOut]
+    dns: list[ReconDNSOut] = Field(default_factory=list)
+    whois: list[ReconWhoisOut] = Field(default_factory=list)
+    technologies: list[ReconTechnologyOut] = Field(default_factory=list)
+    http: list[ReconHTTPOut] = Field(default_factory=list)

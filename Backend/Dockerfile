@@ -5,10 +5,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# nmap for reconnaissance; Pango/HarfBuzz/Cairo for WeasyPrint PDF output.
+# nmap, dig, whois, curl and WhatWeb for reconnaissance; Pango/HarfBuzz/Cairo
+# for WeasyPrint PDF output.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nmap \
+        dnsutils \
+        whois \
+        curl \
+        ruby \
+        ruby-addressable \
         ca-certificates \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
@@ -21,7 +27,12 @@ RUN apt-get update \
         libffi8 \
         shared-mime-info \
         fonts-dejavu-core \
-    && rm -rf /var/lib/apt/lists/*
+    && curl -fsSL https://github.com/urbanadventurer/WhatWeb/archive/refs/tags/v0.6.4.tar.gz \
+        -o /tmp/whatweb.tar.gz \
+    && mkdir -p /opt/whatweb \
+    && tar -xzf /tmp/whatweb.tar.gz -C /opt/whatweb --strip-components=1 \
+    && ln -s /opt/whatweb/whatweb /usr/local/bin/whatweb \
+    && rm -rf /tmp/whatweb.tar.gz /var/lib/apt/lists/*
 
 WORKDIR /app
 

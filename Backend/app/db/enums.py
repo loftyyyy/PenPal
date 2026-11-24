@@ -61,6 +61,7 @@ class ScanStatus(StrEnum):
 class FindingSource(StrEnum):
     NMAP = "nmap"
     ZAP = "zap"
+    WHATWEB = "whatweb"
     MANUAL = "manual"
 
 

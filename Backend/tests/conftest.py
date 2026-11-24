@@ -43,7 +43,7 @@ from app.services.ai.manager import AIAnalysisManager, get_ai_manager
 from app.services.ai.mock import MockProvider
 from app.services.ai.service import AIAnalysisService, RateLimiter
 from app.services.scan_manager import ScanManager, get_scan_manager
-from tests.fakes import FakeNmapRunner, FakeZapRunner
+from tests.fakes import FakeExternalRunner, FakeNmapRunner, FakeZapRunner
 
 
 @pytest.fixture(autouse=True)
@@ -87,16 +87,23 @@ def zap_runner() -> FakeZapRunner:
 
 
 @pytest.fixture
+def external_runner() -> FakeExternalRunner:
+    return FakeExternalRunner()
+
+
+@pytest.fixture
 async def scan_manager(
     session_factory: async_sessionmaker[AsyncSession],
     nmap_runner: FakeNmapRunner,
     zap_runner: FakeZapRunner,
+    external_runner: FakeExternalRunner,
 ) -> AsyncIterator[ScanManager]:
     manager = ScanManager(
         session_factory,
         get_settings(),
         nmap_runner=nmap_runner,
         zap_runner=zap_runner,
+        external_runner=external_runner,
     )
     yield manager
     await manager.shutdown()

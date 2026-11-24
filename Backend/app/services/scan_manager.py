@@ -7,6 +7,7 @@ recovery marks interrupted jobs failed so clients never wait forever.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -25,10 +26,18 @@ from app.db.enums import (
 )
 from app.db.models import Assessment, Scan, ScopeItem
 from app.services import audit
+from app.services.external_runner import (
+    ExternalToolError,
+    ExternalToolRunner,
+    summarize_external_output,
+)
 from app.services.finding_normalizer import (
+    WhatWebParseError,
     ZapParseError,
     normalize_nmap_result,
+    normalize_whatweb_result,
     normalize_zap_result,
+    parse_whatweb_document,
     parse_zap_document,
 )
 from app.services.nmap_parser import NmapParseError, NmapResult, parse_nmap_xml
@@ -52,6 +61,28 @@ class RawOutput:
     data: bytes
     filename: str
     tool_version: str | None = None
+
+
+WHOIS_SKIP_NOTE = (
+    "not applicable for private/internal targets; no external lookup performed"
+)
+
+
+def _all_private(addresses: list[str]) -> bool:
+    if not addresses:
+        return False
+    try:
+        for value in addresses:
+            address = ipaddress.ip_address(value)
+            if not (
+                address.is_private
+                or address.is_loopback
+                or address.is_link_local
+            ):
+                return False
+    except ValueError:
+        return False
+    return True
 
 
 def _risk_count(alerts: Any, risk: str) -> int:
@@ -102,14 +133,19 @@ class ScanManager:
         *,
         nmap_runner: Any | None = None,
         zap_runner: Any | None = None,
+        external_runner: ExternalToolRunner | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.nmap_runner = nmap_runner or NmapRunner(settings)
         self.zap_runner = zap_runner
+        self.external_runner = external_runner
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._cancel_events: dict[int, asyncio.Event] = {}
         self._nmap_semaphore = asyncio.Semaphore(max(1, settings.nmap_max_concurrency))
+        self._external_semaphore = asyncio.Semaphore(
+            max(1, settings.nmap_max_concurrency)
+        )
         self._zap_lock = asyncio.Lock()
 
     async def start(self, scan_id: int) -> None:
@@ -258,6 +294,38 @@ class ScanManager:
                         cancel_event=cancel_event,
                         progress=progress,
                     )
+            elif scan.tool in {
+                ScanTool.DIG,
+                ScanTool.WHOIS,
+                ScanTool.WHATWEB,
+                ScanTool.CURL,
+            }:
+                if self.external_runner is None:
+                    await self._finish_failed(
+                        scan_id, f"{scan.tool.value} integration is not available"
+                    )
+                    return
+                if scan.tool == ScanTool.WHOIS and _all_private(
+                    decision.resolved_ips
+                ):
+                    whois_skipped = True
+                    raw = RawOutput(
+                        data=WHOIS_SKIP_NOTE.encode("utf-8"),
+                        filename="whois.txt",
+                    )
+                else:
+                    whois_skipped = False
+                    async with self._external_semaphore:
+                        await progress(10)
+                        result = await self.external_runner.run(
+                            tool=ScanTool(scan.tool),
+                            target=scan.target,
+                            timeout_seconds=self.settings.scan_timeout(
+                                scan.tool, scan.profile
+                            ),
+                            cancel_event=cancel_event,
+                        )
+                    raw = RawOutput(data=result.raw, filename=result.filename)
             else:  # pragma: no cover - model enum prevents this
                 await self._finish_failed(scan_id, f"unsupported tool {scan.tool}")
                 return
@@ -278,6 +346,7 @@ class ScanManager:
             parse_summary: dict[str, Any] | None = None
             parsed: NmapResult | None = None
             document: dict[str, Any] | None = None
+            whatweb_entries: list[dict[str, Any]] | None = None
             if scan.tool == ScanTool.NMAP:
                 try:
                     parsed = await asyncio.to_thread(parse_nmap_xml, raw.data)
@@ -312,6 +381,32 @@ class ScanManager:
                     "low": _risk_count(alerts, "low"),
                     "info": _risk_count(alerts, "info"),
                 }
+            elif scan.tool in {
+                ScanTool.DIG,
+                ScanTool.WHOIS,
+                ScanTool.WHATWEB,
+                ScanTool.CURL,
+            }:
+                if scan.tool == ScanTool.WHOIS and whois_skipped:
+                    parse_summary = {
+                        "skipped": True,
+                        "note": WHOIS_SKIP_NOTE,
+                    }
+                else:
+                    parse_summary = await asyncio.to_thread(
+                        summarize_external_output, ScanTool(scan.tool), raw.data
+                    )
+                if scan.tool == ScanTool.WHATWEB:
+                    try:
+                        whatweb_entries = await asyncio.to_thread(
+                            parse_whatweb_document, raw.data
+                        )
+                    except WhatWebParseError as exc:
+                        await self._store_raw(scan_id, relative_path, digest)
+                        await self._finish_failed(
+                            scan_id, f"WhatWeb JSON parse failed: {exc}"
+                        )
+                        return
 
             await self._mark_completed(
                 scan_id,
@@ -320,7 +415,12 @@ class ScanManager:
                 tool_version=tool_version,
                 parse_summary=parse_summary,
             )
-            await self._normalize_findings(scan_id, parsed=parsed, document=document)
+            await self._normalize_findings(
+                scan_id,
+                parsed=parsed,
+                document=document,
+                whatweb_entries=whatweb_entries,
+            )
             async with self.session_factory() as db:
                 fresh = await db.get(Scan, scan_id)
                 if fresh is not None:
@@ -342,6 +442,8 @@ class ScanManager:
         except NmapRunError as exc:
             await self._finish_failed(scan_id, str(exc))
         except ZapError as exc:
+            await self._finish_failed(scan_id, str(exc))
+        except ExternalToolError as exc:
             await self._finish_failed(scan_id, str(exc))
         except asyncio.CancelledError:
             await self._finish_cancelled(scan_id)
@@ -429,8 +531,9 @@ class ScanManager:
         *,
         parsed: NmapResult | None,
         document: dict[str, Any] | None,
+        whatweb_entries: list[dict[str, Any]] | None,
     ) -> None:
-        if parsed is None and document is None:
+        if parsed is None and document is None and whatweb_entries is None:
             return
         try:
             async with self.session_factory() as db:
@@ -439,6 +542,10 @@ class ScanManager:
                     return
                 if parsed is not None:
                     counts = await normalize_nmap_result(db, fresh, parsed)
+                elif whatweb_entries is not None:
+                    counts = await normalize_whatweb_result(
+                        db, fresh, whatweb_entries
+                    )
                 else:
                     counts = await normalize_zap_result(db, fresh, document or {})
                 await db.commit()
@@ -495,7 +602,10 @@ def get_scan_manager() -> ScanManager:
 
         settings = get_settings()
         _manager = ScanManager(
-            get_session_factory(), settings, zap_runner=ZapScanRunner(settings)
+            get_session_factory(),
+            settings,
+            zap_runner=ZapScanRunner(settings),
+            external_runner=ExternalToolRunner(settings),
         )
     return _manager
 

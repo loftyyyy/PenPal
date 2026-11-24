@@ -10,7 +10,12 @@ from app.services.zap_client import ZapError
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from tests.fakes import NMAP_FIXTURE, FakeNmapRunner, FakeZapRunner
+from tests.fakes import (
+    NMAP_FIXTURE,
+    FakeExternalRunner,
+    FakeNmapRunner,
+    FakeZapRunner,
+)
 from tests.utils import add_scope, create_assessment, create_user, login_headers
 
 
@@ -524,6 +529,86 @@ async def test_unparsable_zap_output_still_stores_raw_evidence(
         select(func.count(Finding.id)).where(Finding.assessment_id == assessment.id)
     )
     assert finding_count == 0
+
+
+async def test_dig_whois_whatweb_and_curl_scans(
+    client: AsyncClient,
+    db: AsyncSession,
+    scan_manager: ScanManager,
+    external_runner: FakeExternalRunner,
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    base = f"/api/v1/assessments/{assessment.id}/scans"
+    cases = [
+        ("dig", "127.0.0.1", "dig.txt", "records", "text/plain"),
+        ("whois", "127.0.0.1", "whois.txt", "skipped", "text/plain"),
+        ("whatweb", "http://127.0.0.1:3000/", "whatweb.json", "technologies", "application/json"),
+        ("curl", "http://127.0.0.1:3000/", "curl.txt", "status_code", "text/plain"),
+    ]
+    for tool, target, filename, summary_key, media_type in cases:
+        response = await client.post(
+            base,
+            headers=headers,
+            json={"tool": tool, "profile": "default", "target": target},
+        )
+        assert response.status_code == 202, response.text
+        scan_id = response.json()["scan_id"]
+        await scan_manager.wait(scan_id)
+
+        detail = await client.get(f"/api/v1/scans/{scan_id}", headers=headers)
+        body = detail.json()
+        assert body["status"] == "completed"
+        assert body["tool"] == tool
+        assert body["target"] == target
+        assert body["parameters"]["raw_filename"] == filename
+        assert summary_key in body["parameters"]["result_summary"]
+        if tool == "whois":
+            assert body["parameters"]["result_summary"]["skipped"] is True
+
+        raw = await client.get(f"/api/v1/scans/{scan_id}/raw", headers=headers)
+        assert raw.status_code == 200
+        assert raw.headers["content-type"].startswith(media_type)
+        assert raw.content
+
+    assert [call["tool"] for call in external_runner.calls] == [
+        "dig",
+        "whatweb",
+        "curl",
+    ]
+
+    recon = await client.get(
+        f"/api/v1/assessments/{assessment.id}/recon", headers=headers
+    )
+    assert recon.status_code == 200, recon.text
+    recon_body = recon.json()
+    assert recon_body["dns"][0]["records"]["A"] == ["93.184.216.34"]
+    assert recon_body["whois"][0]["skipped"] is True
+    assert "no external lookup performed" in recon_body["whois"][0]["note"]
+    assert recon_body["technologies"][0]["technologies"]["HTTPServer"] == [
+        "nginx/1.24.0"
+    ]
+    assert recon_body["http"][0]["status_code"] == 200
+
+    whatweb_findings = await client.get(
+        f"/api/v1/assessments/{assessment.id}/findings",
+        headers=headers,
+        params={"source": "whatweb"},
+    )
+    assert whatweb_findings.json()["total"] == 1
+    assert whatweb_findings.json()["items"][0]["tool_severity"] == "info"
+
+    bad_target = await client.post(
+        base,
+        headers=headers,
+        json={"tool": "dig", "profile": "default", "target": "http://127.0.0.1/"},
+    )
+    assert bad_target.status_code == 422
+    bad_profile = await client.post(
+        base,
+        headers=headers,
+        json={"tool": "dig", "profile": "quick", "target": "127.0.0.1"},
+    )
+    assert bad_profile.status_code == 422
 
 
 async def test_recon_aggregates_completed_scans(
