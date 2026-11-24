@@ -43,6 +43,24 @@ def test_jwt_algorithm_is_pinned_to_hs256() -> None:
     assert _settings(jwt_algorithm="hs256").jwt_algorithm == "HS256"
 
 
+def test_empty_ai_extra_body_and_top_p_are_tolerated() -> None:
+    settings = _settings(
+        ai_extra_body="",
+        ai_fallback_extra_body="",
+        ai_top_p="",
+    )
+    assert settings.ai_extra_body == {}
+    assert settings.ai_fallback_extra_body == {}
+    assert settings.ai_top_p is None
+
+    parsed = _settings(
+        ai_extra_body='{"chat_template_kwargs":{"enable_thinking":true}}'
+    )
+    assert parsed.ai_extra_body == {
+        "chat_template_kwargs": {"enable_thinking": True}
+    }
+
+
 def test_openai_compat_requires_key_and_model() -> None:
     settings = _settings(
         env="production",

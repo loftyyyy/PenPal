@@ -7,6 +7,7 @@ refused when any placeholder secret is still in place.
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 from functools import lru_cache
 from pathlib import Path
@@ -111,8 +112,8 @@ class Settings(BaseSettings):
     ai_fallback_timeout_seconds: int = 120
     ai_temperature: float = 0.2
     ai_top_p: float | None = None
-    ai_extra_body: dict[str, object] = {}
-    ai_fallback_extra_body: dict[str, object] = {}
+    ai_extra_body: str | dict[str, object] = {}
+    ai_fallback_extra_body: str | dict[str, object] = {}
     ai_max_rpm: int = 10
     ai_max_concurrency: int = 2
     ai_max_evidence_chars: int = 4000
@@ -162,6 +163,14 @@ class Settings(BaseSettings):
     def _empty_optional_dict(cls, value: object) -> object:
         if value is None or (isinstance(value, str) and not value.strip()):
             return {}
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except ValueError as exc:
+                raise ValueError("AI extra body must be a JSON object") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("AI extra body must be a JSON object")
+            return parsed
         return value
 
     @property
