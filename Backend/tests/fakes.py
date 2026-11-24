@@ -77,10 +77,15 @@ def load_zap_alerts() -> list[dict[str, Any]]:
 class ScriptedProvider(AIProvider):
     """Replays scripted outputs or exceptions and records every prompt."""
 
-    name = "scripted"
-    model = "scripted-model"
-
-    def __init__(self, outputs: list[str | Exception]) -> None:
+    def __init__(
+        self,
+        outputs: list[str | Exception],
+        *,
+        name: str = "scripted",
+        model: str = "scripted-model",
+    ) -> None:
+        self.name = name
+        self.model = model
         self.outputs = list(outputs)
         self.calls: list[dict[str, str]] = []
         self.active = 0
@@ -103,7 +108,13 @@ class ScriptedProvider(AIProvider):
             item = self.outputs.pop(0)
             if isinstance(item, Exception):
                 raise item
-            return ProviderResult(content=item, prompt_tokens=10, completion_tokens=20)
+            return ProviderResult(
+                content=item,
+                prompt_tokens=10,
+                completion_tokens=20,
+                provider=self.name,
+                model=self.model,
+            )
         finally:
             self.active -= 1
 

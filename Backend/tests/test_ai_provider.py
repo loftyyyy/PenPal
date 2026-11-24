@@ -6,8 +6,10 @@ import httpx
 import pytest
 from app.core.config import Settings
 from app.services.ai.base import ProviderError
+from app.services.ai.failover import FailoverProvider
 from app.services.ai.mock import MockProvider
 from app.services.ai.openai_compat import OpenAICompatProvider
+from tests.fakes import ScriptedProvider
 
 
 def _settings(**overrides) -> Settings:
@@ -175,6 +177,51 @@ async def test_missing_configuration_fails_without_network() -> None:
 def test_unknown_provider_is_rejected_by_configuration() -> None:
     with pytest.raises(ValueError, match="AI_PROVIDER"):
         _settings(ai_provider="not-a-provider")
+
+
+async def test_failover_uses_fallback_only_after_primary_failure() -> None:
+    primary = ScriptedProvider(
+        [ProviderError("primary down", transient=True)],
+        name="primary",
+        model="primary-model",
+    )
+    fallback = ScriptedProvider(
+        ['{"ok": true}'], name="fallback", model="fallback-model"
+    )
+    provider = FailoverProvider(primary, fallback)
+
+    result = await provider.complete_json("s", "u", max_tokens=10)
+    assert result.content == '{"ok": true}'
+    assert result.provider == "fallback"
+    assert result.model == "fallback-model"
+    assert len(primary.calls) == 1
+    assert len(fallback.calls) == 1
+
+    primary_ok = ScriptedProvider(
+        ['{"ok": true}'], name="primary", model="primary-model"
+    )
+    unused = ScriptedProvider([], name="fallback", model="fallback-model")
+    result = await FailoverProvider(primary_ok, unused).complete_json(
+        "s", "u", max_tokens=10
+    )
+    assert result.provider == "primary"
+    assert unused.calls == []
+
+
+async def test_failover_reports_both_failures() -> None:
+    primary = ScriptedProvider(
+        [ProviderError("primary down", transient=True)], name="primary"
+    )
+    fallback = ScriptedProvider(
+        [ProviderError("fallback down", transient=False)], name="fallback"
+    )
+    with pytest.raises(ProviderError) as caught:
+        await FailoverProvider(primary, fallback).complete_json(
+            "s", "u", max_tokens=10
+        )
+    assert "primary down" in str(caught.value)
+    assert "fallback down" in str(caught.value)
+    assert caught.value.transient is True
 
 
 async def test_mock_provider_is_deterministic_and_requests_json() -> None:

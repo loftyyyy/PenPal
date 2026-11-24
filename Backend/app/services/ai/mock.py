@@ -59,4 +59,6 @@ class MockProvider(AIProvider):
             content=json.dumps(payload),
             prompt_tokens=0,
             completion_tokens=0,
+            provider=self.name,
+            model=self.model,
         )

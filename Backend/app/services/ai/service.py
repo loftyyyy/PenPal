@@ -21,6 +21,7 @@ from app.db.enums import AIAnalysisStatus, AIFunction, EvidenceType, Severity
 from app.db.models import AIAnalysis, Assessment, Evidence, Finding
 from app.services import audit
 from app.services.ai.base import AIProvider, ProviderError, ProviderResult
+from app.services.ai.failover import FailoverProvider
 from app.services.ai.mock import MockProvider
 from app.services.ai.openai_compat import OpenAICompatProvider
 from app.services.ai.prompts import (
@@ -95,7 +96,19 @@ def build_provider(settings: Settings) -> AIProvider:
     if settings.ai_provider == "mock":
         return MockProvider()
     if settings.ai_provider == "openai_compat":
-        return OpenAICompatProvider(settings)
+        primary = OpenAICompatProvider(settings)
+        if settings.ai_fallback_base_url:
+            fallback_settings = settings.model_copy(
+                update={
+                    "ai_base_url": settings.ai_fallback_base_url,
+                    "ai_api_key": settings.ai_fallback_api_key,
+                    "ai_model": settings.ai_fallback_model,
+                }
+            )
+            return FailoverProvider(
+                primary, OpenAICompatProvider(fallback_settings)
+            )
+        return primary
     raise ProviderError(f"Unknown AI_PROVIDER: {settings.ai_provider}")
 
 
@@ -290,8 +303,8 @@ class AIAnalysisService:
         analysis = AIAnalysis(
             finding_id=finding.id,
             function=function,
-            provider=self.provider.name,
-            model=self.provider.model,
+            provider=(result.provider if result else None) or self.provider.name,
+            model=(result.model if result else None) or self.provider.model,
             prompt_version=PROMPT_VERSION,
             input_hash=digest,
             sanitized_input=user,

@@ -102,8 +102,7 @@ class OpenAICompatProvider(AIProvider):
             body["response_format"] = {"type": "json_object"}
         return body
 
-    @staticmethod
-    def _result(data: Any) -> ProviderResult:
+    def _result(self, data: Any) -> ProviderResult:
         if not isinstance(data, dict):
             raise ProviderError("AI provider returned an unexpected payload")
         choices = data.get("choices")
@@ -123,6 +122,8 @@ class OpenAICompatProvider(AIProvider):
             content=content if isinstance(content, str) else "",
             prompt_tokens=_token_count(usage.get("prompt_tokens")),
             completion_tokens=_token_count(usage.get("completion_tokens")),
+            provider=self.name,
+            model=self.model,
         )
 
 

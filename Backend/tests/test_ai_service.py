@@ -12,6 +12,7 @@ from app.db.enums import (
 )
 from app.db.models import AIAnalysis, AuditLog, Evidence, Finding
 from app.services.ai.base import ProviderError
+from app.services.ai.failover import FailoverProvider
 from app.services.ai.mock import MockProvider
 from app.services.ai.service import AIAnalysisService, RateLimiter
 from sqlalchemy import func, select
@@ -314,6 +315,29 @@ async def test_non_transient_provider_error_does_not_retry(db: AsyncSession) -> 
     assert analyses[0].error == "bad api key"
     await db.refresh(finding)
     assert finding.ai_suggested_severity is None
+
+
+async def test_fallback_provider_is_recorded(db: AsyncSession) -> None:
+    user, _, finding = await _setup(db)
+    provider = FailoverProvider(
+        ScriptedProvider(
+            [ProviderError("primary down", transient=True)],
+            name="primary",
+            model="primary-model",
+        ),
+        ScriptedProvider(
+            [VALID_INTERPRET], name="fallback", model="fallback-model"
+        ),
+    )
+
+    analyses = await _service(provider).analyze_finding(
+        db, finding, user_id=user.id, functions=(AIFunction.INTERPRET,)
+    )
+    await db.commit()
+
+    assert analyses[0].status is AIAnalysisStatus.SUCCESS
+    assert analyses[0].provider == "fallback"
+    assert analyses[0].model == "fallback-model"
 
 
 async def test_provider_failure_does_not_break_the_second_function(

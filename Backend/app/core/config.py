@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     ai_base_url: str = ""
     ai_api_key: str = ""
     ai_model: str = ""
+    ai_fallback_base_url: str = ""
+    ai_fallback_api_key: str = ""
+    ai_fallback_model: str = ""
     ai_max_rpm: int = 10
     ai_max_concurrency: int = 2
     ai_max_evidence_chars: int = 4000
@@ -170,6 +173,16 @@ class Settings(BaseSettings):
             problems.append(
                 "AI_BASE_URL, AI_MODEL and AI_API_KEY are required when "
                 "AI_PROVIDER=openai_compat"
+            )
+        fallback_values = (
+            self.ai_fallback_base_url,
+            self.ai_fallback_api_key,
+            self.ai_fallback_model,
+        )
+        if any(fallback_values) and not all(fallback_values):
+            problems.append(
+                "AI_FALLBACK_BASE_URL, AI_FALLBACK_MODEL and AI_FALLBACK_API_KEY "
+                "must be set together"
             )
         if problems:
             message = "Unsafe configuration: " + "; ".join(problems)

@@ -11,6 +11,8 @@ class ProviderResult:
     content: str
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class ProviderError(RuntimeError):

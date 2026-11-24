@@ -63,12 +63,19 @@ async def dependencies(
         configured = bool(
             settings.ai_base_url and settings.ai_model and settings.ai_api_key
         )
+        fallback = bool(
+            settings.ai_fallback_base_url
+            and settings.ai_fallback_model
+            and settings.ai_fallback_api_key
+        )
+        detail = (
+            "openai-compatible endpoint configured"
+            + ("; fallback configured" if fallback else "")
+            if configured
+            else "not configured"
+        )
         checks.append(
-            DependencyStatus(
-                name="ai_provider",
-                ok=configured,
-                detail="openai-compatible endpoint configured" if configured else "not configured",
-            )
+            DependencyStatus(name="ai_provider", ok=configured, detail=detail)
         )
     else:
         checks.append(

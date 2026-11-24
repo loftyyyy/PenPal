@@ -55,6 +55,32 @@ def test_openai_compat_requires_key_and_model() -> None:
         settings.validate_for_startup()
 
 
+def test_fallback_ai_settings_must_be_complete() -> None:
+    settings = _settings(
+        env="production",
+        ai_provider="openai_compat",
+        ai_base_url="https://primary.test/v1",
+        ai_model="primary-model",
+        ai_api_key="primary-key",
+        ai_fallback_base_url="https://fallback.test/v1",
+    )
+    with pytest.raises(RuntimeError, match="AI_FALLBACK_BASE_URL"):
+        settings.validate_for_startup()
+
+
+def test_complete_fallback_ai_settings_are_accepted() -> None:
+    settings = _settings(
+        ai_provider="openai_compat",
+        ai_base_url="https://primary.test/v1",
+        ai_model="primary-model",
+        ai_api_key="primary-key",
+        ai_fallback_base_url="https://fallback.test/v1",
+        ai_fallback_model="fallback-model",
+        ai_fallback_api_key="fallback-key",
+    )
+    settings.validate_for_startup()
+
+
 def test_public_target_warning_is_loud(caplog: pytest.LogCaptureFixture) -> None:
     settings = _settings(allow_public_targets=True)
     with caplog.at_level(logging.WARNING):
