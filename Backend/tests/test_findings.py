@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.config import get_settings
 from app.db.enums import (
+    EvidenceType,
     FindingCategory,
     FindingSource,
     Severity,
@@ -423,7 +424,7 @@ async def test_evidence_note_and_file_validation(
     db: AsyncSession,
     monkeypatch,
 ) -> None:
-    _, headers, assessment = await _setup(client, db)
+    user, headers, assessment = await _setup(client, db)
     finding = await create_finding(db, assessment)
 
     note = await client.post(
@@ -466,11 +467,30 @@ async def test_evidence_note_and_file_validation(
     assert body["type"] == "file"
     assert body["filename"].endswith(".png")
     assert body["content"] is None
+    assert body["has_file"] is True
+    assert body["download_url"] == f"/api/v1/evidence/{body['id']}/download"
     assert body["sha256"] is not None
     path = resolve_data_path(
         get_settings(), f"uploads/{assessment.id}/{finding.id}/{body['filename']}"
     )
     assert path.is_file()
+
+    downloaded = await client.get(body["download_url"], headers=headers)
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"\x89PNG\r\n\x1a\nhello"
+    assert downloaded.headers["content-type"].startswith("image/png")
+    assert "attachment" in downloaded.headers["content-disposition"]
+
+    note_download = await client.get(
+        f"/api/v1/evidence/{note.json()['id']}/download", headers=headers
+    )
+    assert note_download.status_code == 409
+    assert note_download.json()["error"]["code"] == "evidence_not_a_file"
+
+    missing_evidence = await client.get(
+        "/api/v1/evidence/9999/download", headers=headers
+    )
+    assert missing_evidence.status_code == 404
 
     bad_extension = await client.post(
         f"/api/v1/findings/{finding.id}/evidence",
@@ -515,6 +535,21 @@ async def test_evidence_note_and_file_validation(
         .all()
     )
     assert {row.type.value for row in evidence_rows} == {"note", "file"}
+
+    unsafe = Evidence(
+        finding_id=finding.id,
+        type=EvidenceType.FILE,
+        file_path="../outside.txt",
+        sha256="a" * 64,
+        created_by=user.id,
+    )
+    db.add(unsafe)
+    await db.commit()
+    await db.refresh(unsafe)
+    escaped = await client.get(
+        f"/api/v1/evidence/{unsafe.id}/download", headers=headers
+    )
+    assert escaped.status_code == 404
 
 
 async def test_evidence_for_unknown_finding_returns_404(

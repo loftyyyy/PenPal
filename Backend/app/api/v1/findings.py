@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import Settings, get_settings
 from app.core.deps import (
@@ -16,11 +18,13 @@ from app.core.deps import (
 )
 from app.core.errors import AppError
 from app.db.enums import (
+    EvidenceType,
     FindingCategory,
     FindingSource,
     Severity,
     VerificationStatus,
 )
+from app.db.models import Evidence
 from app.schemas.common import Page
 from app.schemas.findings import (
     EvidenceOut,
@@ -34,8 +38,17 @@ from app.schemas.findings import (
 from app.services import evidence as evidence_service
 from app.services import findings as finding_service
 from app.services import verification as verification_service
+from app.services.storage import UnsafePathError, resolve_data_path
 
 router = APIRouter(tags=["Findings"])
+
+EVIDENCE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".txt": "text/plain",
+    ".pdf": "application/pdf",
+}
 
 
 @router.get(
@@ -193,3 +206,42 @@ async def list_evidence(
     await get_finding_or_404(db, finding_id)
     rows = await evidence_service.list_evidence(db, finding_id)
     return [EvidenceOut.from_evidence(row) for row in rows]
+
+
+@router.get(
+    "/evidence/{evidence_id}/download",
+    response_class=FileResponse,
+    summary="Download an uploaded evidence file",
+    responses={
+        200: {"description": "Stored evidence file"},
+        404: {"description": "Evidence or file not found"},
+        409: {"description": "Evidence has no file"},
+    },
+)
+async def download_evidence(
+    evidence_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FileResponse:
+    evidence = await db.get(Evidence, evidence_id)
+    if evidence is None:
+        raise AppError(404, "not_found", f"Evidence {evidence_id} was not found")
+    if evidence.type is not EvidenceType.FILE or not evidence.file_path:
+        raise AppError(
+            409,
+            "evidence_not_a_file",
+            "This evidence item does not have a downloadable file",
+        )
+    try:
+        path = resolve_data_path(settings, evidence.file_path)
+    except UnsafePathError as exc:
+        raise AppError(404, "not_found", "Evidence file was not found") from exc
+    if not path.is_file():
+        raise AppError(404, "not_found", "Evidence file was not found")
+    media_type = EVIDENCE_MEDIA_TYPES.get(
+        Path(evidence.file_path).suffix.lower(), "application/octet-stream"
+    )
+    return FileResponse(
+        path, media_type=media_type, filename=Path(evidence.file_path).name
+    )

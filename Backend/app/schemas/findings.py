@@ -135,6 +135,8 @@ class EvidenceOut(BaseModel):
     type: EvidenceType
     content: str | None
     filename: str | None = None
+    has_file: bool = False
+    download_url: str | None = None
     sha256: str | None
     created_by: int | None
     created_at: datetime
@@ -144,6 +146,7 @@ class EvidenceOut(BaseModel):
         filename = None
         if evidence.file_path:
             filename = evidence.file_path.rsplit("/", 1)[-1]
+        has_file = bool(evidence.file_path)
         return cls(
             id=evidence.id,
             finding_id=evidence.finding_id,
@@ -151,6 +154,10 @@ class EvidenceOut(BaseModel):
             type=evidence.type,
             content=evidence.content,
             filename=filename,
+            has_file=has_file,
+            download_url=(
+                f"/api/v1/evidence/{evidence.id}/download" if has_file else None
+            ),
             sha256=evidence.sha256,
             created_by=evidence.created_by,
             created_at=evidence.created_at,
