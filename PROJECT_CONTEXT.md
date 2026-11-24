@@ -61,7 +61,7 @@ Web apps expose many hosts, ports, endpoints, parameters, and settings. Testers 
 | Owner / authorizing person | Rho Alphonce Jornadal, Charisse Priego, Jonathan Sindo (the system's own developers) |
 | Proof of authorization | Signed authorization letter, attached to the proposal as a separate PDF |
 | Hosting environment | **Local machine**, local development environment, reached via `localhost` or an explicitly authorized local IP address |
-| Test accounts | Administrator and staff accounts with different permissions (used for authentication and authorization testing) ⚠ OPEN: customer role? (see §17) |
+| Test accounts | Administrator and staff accounts only. LSRS has no customer-facing role. Access checks cover unauthenticated, staff (where present) and admin principals; the role list is configurable. |
 | Test data | Synthetic only: customer records, sample gown inventory, simulated reservations, rental transactions, payment records. No real customer data, no production credentials |
 
 ### Networking note for the engineers
@@ -110,7 +110,7 @@ The default network allowlist (loopback + private ranges) must keep working for 
 | Category | What is tested |
 |---|---|
 | **Authentication and login security** | Password and lockout rules, failed-login error handling, default/weak credentials on test accounts, password reset procedure |
-| **Access control and authorization** | Replaying requests between roles: staff must not reach admin pages, user management, or payment functions; users must not read other records by changing an ID in the URL (IDOR). Highest-risk area |
+| **Access control and authorization** | Replaying requests as unauthenticated, staff (when present) and admin: staff must not reach admin pages or user management; records must not be readable by changing an ID in the URL (IDOR). Highest-risk area |
 | **Input validation and injection** | Input and search fields in inventory, customer, reservation, and payment modules; SQL injection and XSS at **low intensity** via ZAP and manual checks |
 | **Session management** | Session cookie flags, session timeout, logout behavior, reusing a session after logout (curl and browser dev tools) |
 | **Security configuration and HTTPS** | HTTP security headers, cookie attributes, CORS, banners, error pages, and TLS configuration if HTTPS is enabled on the permitted host |
@@ -166,8 +166,8 @@ PostgreSQL   Tool runners    OWASP ZAP         AI provider         LSRS test tar
 | Database | PostgreSQL | Assessments, scans, findings, evidence, verification status, audit log |
 | Security tool 1 | Nmap | Port, service, and version discovery (XML output) |
 | Security tool 2 | OWASP ZAP (daemon mode) | Web vulnerability scanning through the REST API |
-| Supporting tools | dig, whois, WhatWeb, curl | DNS/ownership info, technology fingerprinting, scripted auth/session/access-control checks |
-| AI model / API | Google Gemini API (free tier); swappable to a local Ollama model if the instructor prefers no hosted API; mock provider for tests | Finding interpretation, remediation, summary |
+| Supporting tools | dig, whois, WhatWeb, `http_checks` (Python/httpx) | DNS/ownership info, technology fingerprinting, scripted auth/session/access-control/configuration checks |
+| AI model / API | Google Gemini API (free tier) primary and OpenRouter free-tier fallback, failover only; local Ollama remains an optional OpenAI-compatible provider; mock provider for tests | Finding interpretation, remediation and summary |
 | Reports | PDF generator (planned: Jinja2 + WeasyPrint) | Final assessment report |
 | Deployment | Docker Compose on a local machine or Linux VM | Reproducible deployment |
 
@@ -194,7 +194,7 @@ None of these is a general chatbot. All take real tool output as input.
 | **Suggesting vulnerability remediation** | Vulnerability details, scan evidence, classification | Recommended fixes, mitigation steps, secure coding practices | Finding Details page, Remediation section |
 | **Assessment summary generation** | **Confirmed findings only** | Executive summary and key risks in plain language | Final report and dashboard |
 
-⚠ OPEN: the remediation function's input says "verified vulnerability details" while the process (§12, step 5) runs AI before verification. See §17.
+Remediation timing is decided: remediation is generated as a pre-verification AI suggestion, and may be re-run on a confirmed finding with the verified context. Confirmation can accept the existing AI remediation as-is, with an audit entry. Assessment summaries are drafts until the assessor approves them; only the approved summary is used in the report.
 
 ### AI data protection (non-negotiable)
 - The model receives only what it needs: finding type, **relative endpoint path**, and a **brief evidence snippet**.
@@ -212,8 +212,7 @@ None of these is a general chatbot. All take real tool output as input.
 - **NIST SP 800-115:** planning, discovery, attack, and reporting phases.
 - **Penetration Testing Execution Standard (PTES):** overall workflow.
 - Findings are mapped to the **OWASP Top 10** and **CWE** identifiers.
-- **Severity:** likelihood × impact, translated to **Critical, High, Medium, Low, Informational**, aligned with CVSS-style ratings.
-  *Proposed default (⚠ OPEN, confirm):* likelihood 1–5 × impact 1–5 → score 20–25 Critical, 12–19 High, 6–11 Medium, 3–5 Low, 1–2 Informational.
+- **Severity:** likelihood × impact, translated to **Critical, High, Medium, Low, Informational**, aligned with CVSS-style ratings. Decided bands: likelihood 1–5 × impact 1–5 → score 20–25 Critical, 12–19 High, 6–11 Medium, 3–5 Low, 1–2 Informational. The server computes final severity; clients cannot set it.
 
 **Assessment process (maps to PenPal modules)**
 
@@ -285,25 +284,25 @@ Tool severity, AI-suggested severity, and assessor (final) severity are **separa
 
 ## 17. Decisions and open questions
 
-**Decided (from the signed proposal)**
+**Decided (from the signed proposal and team answers)**
 - Name: **PenPal**. Target: **Love & Styles Rental System**, local, synthetic data.
 - Stack: React, Python/FastAPI, PostgreSQL, Docker Compose.
-- Tools: Nmap, dig, whois, WhatWeb, OWASP ZAP (daemon), curl/scripted requests.
-- AI: Google Gemini free tier, swappable to local Ollama; three AI functions; redaction before sending; all AI traffic audited.
-- Verification states: Confirmed / False Positive / Needs Retest. Only Confirmed goes in the main report; unverified AI suggestions go in an appendix.
-- Methodology: WSTG + NIST SP 800-115 + PTES; OWASP Top 10 + CWE mapping; likelihood × impact severity.
+- Tools: Nmap, dig, whois, WhatWeb, OWASP ZAP (daemon), Python `http_checks` (httpx).
+- AI: Gemini free tier primary, OpenRouter free-tier fallback (failover only); three functions (interpret, remediate, summary); redaction before sending; all AI traffic audited.
+- Roles: LSRS has only admin and staff. There is no customer role.
+- Verification states: Confirmed / False Positive / Needs Retest. Only Confirmed counts as a vulnerability and goes in the main report; false positives are excluded from severity counts; pending/needs-retest AI suggestions go in an appendix, labelled unverified.
+- Severity matrix: likelihood 1–5 × impact 1–5. Bands: 20–25 critical, 12–19 high, 6–11 medium, 3–5 low, 1–2 informational. The server computes final severity.
+- Remediation timing: AI remediation is a pre-verification suggestion; confirmation may accept it as-is with an audit entry, and a confirmed finding may re-run remediation with verified context.
+- Assessment summaries are drafts until approved; only the approved summary is used in the report, with unapproved drafts confined to the AI appendix.
+- Where tools run: one backend image with Nmap/dig/whois/WhatWeb installed; HTTP checks run in-process with httpx behind the scope guard.
+- Methodology: WSTG + NIST SP 800-115 + PTES; OWASP Top 10 + CWE mapping.
 
-**⚠ OPEN: inconsistencies inside the proposal to resolve (the team should decide, then update this file)**
-- [ ] **Roles:** the features section says test accounts for *admin, staff, customer*, while the target section lists only *administrator and staff*. Does LSRS have a customer-facing role?
-- [ ] **Categories vs. methodology:** §6 lists five chosen categories, but methodology step 4 mentions "configuration and HTTPS, exposed files, information disclosure, and input validation if time allows". Which is authoritative? (Recommendation: the five in §6; treat exposed files/information disclosure as sub-checks.)
-- [ ] **Remediation timing:** the remediation input is "verified vulnerability details", yet AI analysis (step 5) precedes verification (step 6). Options: generate remediation on demand after confirmation, or generate pre-verification as a suggestion and re-generate after confirmation.
-- [ ] **Authorization:** the "owner/authorizing person" lists three team members, while process step 1 says "record the instructor's authorization". Confirm the instructor's acknowledgment is on file with the authorization letter.
-- [ ] **Severity matrix:** define the exact likelihood × impact scales and thresholds (a default is proposed in §12).
-- [ ] **Where tools run:** "each runs in a container" suggests separate tool-runner containers, but a single backend image with the tools installed is simpler. Pick one.
-- [ ] **References:** the proposal cites the Claude API docs, but the chosen AI is Gemini. Add the Gemini API docs and drop or justify the Claude reference.
-- [ ] **Approved target:** confirm the Proposal milestone (11-12-2026) was approved by the instructor.
-- [ ] **Final AI provider:** Gemini free tier vs. local Ollama for the demo, depending on the instructor's preference.
-- [ ] **Deployment for the demo:** local machine only, or a Linux VM.
+**⚠ OPEN questions for the team**
+- [ ] **Exact LSRS address/port:** set `LSRS_BASE_URL`; do not guess. Prefer an LSRS Compose service over exposing a host port.
+- [ ] **Final Gemini and OpenRouter model names:** set via environment variables; free models may change or disappear.
+- [ ] **Authorization record:** confirm the instructor's acknowledgment is on file with the authorization letter.
+- [ ] **Demo hosting:** local machine or Linux VM.
+- [ ] **Deployed LSRS URL:** the public deployment mentioned by the team is not enabled by default. Scanning public hosts conflicts with §14; it remains blocked until the team records explicit authorization and changes the ethical rules in this file.
 
 ---
 
@@ -321,5 +320,6 @@ Tool severity, AI-suggested severity, and assessor (final) severity are **separa
 
 ## 19. Change log
 
+- **v0.3 (2026-11-24):** Synced to team decisions: admin/staff only (no customer role), decided L×I bands with server-computed severity, Gemini→OpenRouter failover chain, approved summary workflow, HTTP checks via httpx, tools in one backend image. Public targets remain blocked; exact LSRS address and model names stay open.
 - **v0.2 (2026-11-23):** Updated from the signed proposal. Target details and authorization, five assessment categories, added DNS tools/WhatWeb/curl, three AI functions (added summary generation), `false_positive` replaces `rejected`, likelihood × impact severity, PTES, real timeline dates, audit-trail scope (scope events and AI traffic), host-networking note, and a list of proposal inconsistencies.
 - **v0.1 (2026-11-23):** Initial draft from the blank proposal template.
