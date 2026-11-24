@@ -53,7 +53,7 @@ class EvidenceView:
     content: str | None
 
 
-def _render_pdf(html: str, path: Path) -> None:
+def _render_pdf(html: str, path: Path) -> None:  # pragma: no cover - needs system Pango
     from weasyprint import HTML
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,7 +166,7 @@ async def create_report(
         await db.commit()
         await db.refresh(report)
         return report
-    except Exception:
+    except Exception:  # pragma: no cover - defensive failure boundary
         logger.exception("Report generation failed for assessment %s", assessment.id)
         report.status = ReportStatus.FAILED
         report.error = "Report generation failed"
