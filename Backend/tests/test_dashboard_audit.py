@@ -111,13 +111,13 @@ async def test_dashboard_counts_basis_coverage_and_history(
     body = response.json()
     assert body["total_findings"] == 4
     assert body["severity_counts"] == {
-        "critical": 1,
-        "high": 2,
+        "critical": 0,
+        "high": 1,
         "medium": 0,
-        "low": 1,
+        "low": 0,
         "info": 0,
     }
-    assert "Confirmed findings use final severity" in body["severity_basis"]
+    assert "Only confirmed findings contribute" in body["severity_basis"]
     assert body["verification_counts"] == {
         "pending": 2,
         "confirmed": 1,

@@ -18,11 +18,7 @@ from app.schemas.dashboard import (
     TopFinding,
     VerificationCounts,
 )
-from app.services.findings import (
-    effective_severity_expr,
-    last_updated_at,
-    severity_rank_expr,
-)
+from app.services.findings import last_updated_at, severity_rank_expr
 
 
 async def build_dashboard(
@@ -40,9 +36,12 @@ async def build_dashboard(
 
     severity_counts = SeverityCounts()
     severity_rows = await db.execute(
-        select(effective_severity_expr(), func.count(Finding.id))
-        .where(Finding.assessment_id == assessment_id)
-        .group_by(effective_severity_expr())
+        select(Finding.final_severity, func.count(Finding.id))
+        .where(
+            Finding.assessment_id == assessment_id,
+            Finding.verification_status == VerificationStatus.CONFIRMED,
+        )
+        .group_by(Finding.final_severity)
     )
     for severity, count in severity_rows.all():
         if severity is None:

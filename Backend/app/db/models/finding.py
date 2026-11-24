@@ -47,6 +47,8 @@ class Finding(TimestampMixin, Base):
     tool_severity: Mapped[Severity | None] = mapped_column(enum_column(Severity))
     ai_suggested_severity: Mapped[Severity | None] = mapped_column(enum_column(Severity))
     final_severity: Mapped[Severity | None] = mapped_column(enum_column(Severity))
+    likelihood: Mapped[int | None] = mapped_column(sa.Integer)
+    impact: Mapped[int | None] = mapped_column(sa.Integer)
     tool_confidence: Mapped[str | None] = mapped_column(sa.String(50))
     verification_status: Mapped[VerificationStatus] = mapped_column(
         enum_column(VerificationStatus),

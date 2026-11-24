@@ -53,12 +53,12 @@ class DashboardOut(BaseModel):
     severity_counts: SeverityCounts
     severity_basis: str = Field(
         default=(
-            "Confirmed findings use final severity; other findings use AI-suggested "
-            "severity when present, otherwise tool severity."
+            "Only confirmed findings contribute to severity counts, using the "
+            "assessor's final severity."
         ),
         description=(
-            "Confirmed findings use final severity; other findings use AI-suggested "
-            "severity when present, otherwise tool severity."
+            "Only confirmed findings contribute to severity counts, using the "
+            "assessor's final severity."
         ),
     )
     verification_counts: VerificationCounts

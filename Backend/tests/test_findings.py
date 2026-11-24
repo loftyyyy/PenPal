@@ -311,7 +311,65 @@ async def test_verify_rules_and_audit_history(
     assert rows[1].details["previous"]["verification_status"] == "false_positive"
     assert rows[1].details["new"]["verification_status"] == "confirmed"
     assert rows[1].details["severity_defaulted"] is True
+    assert rows[1].details["severity_source"] == "tool"
     assert rows[2].details["severity_defaulted"] is False
+    assert rows[2].details["severity_source"] == "assessor"
+
+
+async def test_confirmed_uses_likelihood_impact_matrix(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    finding = await create_finding(
+        db, assessment, title="Matrix finding", tool_severity=Severity.LOW
+    )
+
+    missing_pair = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={"decision": "confirmed", "likelihood": 4},
+    )
+    assert missing_pair.status_code == 422
+    assert "both likelihood and impact" in missing_pair.json()["error"]["message"]
+
+    response = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={"decision": "confirmed", "likelihood": 4, "impact": 4},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["verification_status"] == "confirmed"
+    assert body["final_severity"] == "high"
+    assert body["likelihood"] == 4
+    assert body["impact"] == 4
+
+    audit = (
+        await db.execute(
+            select(AuditLog)
+            .where(AuditLog.action == "finding.verified")
+            .order_by(AuditLog.id.desc())
+        )
+    ).scalars()
+    row = next(audit)
+    assert row.details["severity_source"] == "matrix"
+    assert row.details["severity_defaulted"] is False
+    assert row.details["new"]["likelihood"] == 4
+    assert row.details["new"]["impact"] == 4
+
+    overridden = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={
+            "decision": "confirmed",
+            "final_severity": "critical",
+            "likelihood": 2,
+            "impact": 2,
+        },
+    )
+    assert overridden.status_code == 200
+    assert overridden.json()["final_severity"] == "critical"
+    assert overridden.json()["likelihood"] == 2
 
 
 async def test_confirmed_without_any_severity_is_rejected(

@@ -48,6 +48,8 @@ class FindingOut(BaseModel):
     tool_severity: Severity | None
     ai_suggested_severity: Severity | None
     final_severity: Severity | None
+    likelihood: int | None
+    impact: int | None
     tool_confidence: str | None
     verification_status: VerificationStatus
     rejection_reason: str | None
@@ -98,6 +100,8 @@ class FindingVerify(BaseModel):
             "example": {
                 "decision": "confirmed",
                 "final_severity": "high",
+                "likelihood": 4,
+                "impact": 4,
                 "final_remediation": "Use parameterised queries.",
                 "reason": None,
             }
@@ -106,6 +110,18 @@ class FindingVerify(BaseModel):
 
     decision: VerificationDecision
     final_severity: Severity | None = None
+    likelihood: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Likelihood 1 (rare) to 5 (almost certain).",
+    )
+    impact: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Impact 1 (negligible) to 5 (severe).",
+    )
     final_remediation: str | None = Field(default=None, max_length=20_000)
     reason: str | None = Field(default=None, max_length=5000)
 

@@ -111,6 +111,7 @@
           <tr><th>Endpoint</th><td>{{ finding.affected_url or "Not recorded" }}{% if finding.http_method %} ({{ finding.http_method }}){% endif %}{% if finding.parameter %} — parameter {{ finding.parameter }}{% endif %}</td></tr>
           <tr><th>Tool / confidence</th><td>{{ finding.source.value }}{% if finding.tool_confidence %} / {{ finding.tool_confidence }}{% endif %}</td></tr>
           <tr><th>Assistant-suggested severity</th><td>{{ finding.ai_suggested_severity.value if finding.ai_suggested_severity else "Not available" }}</td></tr>
+          <tr><th>Likelihood / impact</th><td>{{ finding.likelihood if finding.likelihood is not none else "not set" }} / {{ finding.impact if finding.impact is not none else "not set" }}</td></tr>
           <tr><th>Verified by</th><td>User {{ finding.verified_by or "unknown" }} at {{ finding.verified_at or "unknown time" }}</td></tr>
         </tbody>
       </table>
