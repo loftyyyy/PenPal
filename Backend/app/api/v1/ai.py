@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,10 +53,11 @@ async def analyze_finding(
     db: DbSession,
     user: CurrentUser,
     manager: AIManagerDep,
+    force: Annotated[bool, Query(description="Bypass the AI cache")] = False,
 ) -> FindingAnalysisOut:
     finding = await get_finding_or_404(db, finding_id)
     analyses = await manager.service.analyze_finding(
-        db, finding, user_id=user.id
+        db, finding, user_id=user.id, force=force
     )
     await db.commit()
     return FindingAnalysisOut(
@@ -121,6 +122,7 @@ async def bulk_analyze(
         assessment_id=assessment_id,
         requested_by=user.id,
         finding_ids=selected,
+        force=payload.force,
     )
     await audit.record(
         db,

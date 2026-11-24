@@ -338,6 +338,29 @@ async def test_fallback_provider_is_recorded(db: AsyncSession) -> None:
     assert analyses[0].status is AIAnalysisStatus.SUCCESS
     assert analyses[0].provider == "fallback"
     assert analyses[0].model == "fallback-model"
+    assert analyses[0].attempts is not None
+    assert analyses[0].attempts[0]["outcome"] == "error"
+    assert analyses[0].attempts[1]["outcome"] == "success"
+
+
+async def test_force_bypasses_cache(db: AsyncSession) -> None:
+    user, _, finding = await _setup(db)
+    provider = MockProvider()
+    service = _service(provider)
+
+    await service.analyze_finding(
+        db, finding, user_id=user.id, functions=(AIFunction.INTERPRET,)
+    )
+    await db.commit()
+    await service.analyze_finding(
+        db,
+        finding,
+        user_id=user.id,
+        functions=(AIFunction.INTERPRET,),
+        force=True,
+    )
+    await db.commit()
+    assert len(provider.calls) == 2
 
 
 async def test_provider_failure_does_not_break_the_second_function(

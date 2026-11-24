@@ -13,14 +13,22 @@ class ProviderResult:
     completion_tokens: int | None = None
     provider: str | None = None
     model: str | None = None
+    attempts: list[dict[str, object]] | None = None
 
 
 class ProviderError(RuntimeError):
     """A provider call failed. The message is safe to persist and log."""
 
-    def __init__(self, message: str, *, transient: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        transient: bool = False,
+        attempts: list[dict[str, object]] | None = None,
+    ) -> None:
         super().__init__(message)
         self.transient = transient
+        self.attempts = attempts
 
 
 class AIProvider(ABC):

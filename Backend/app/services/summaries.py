@@ -52,6 +52,8 @@ async def generate_summary(
     assessment: Assessment,
     user: User,
     ai_service: AIAnalysisService,
+    *,
+    force: bool = False,
 ) -> AssessmentSummary:
     confirmed = await _confirmed(db, assessment.id)
     overall_risk = overall_risk_for(confirmed)
@@ -98,7 +100,7 @@ async def generate_summary(
         return summary
 
     analysis = await ai_service.analyze_assessment_summary(
-        db, assessment, user_id=user.id
+        db, assessment, user_id=user.id, force=force
     )
     if analysis.status.value != "success" or not isinstance(analysis.output, dict):
         raise AppError(

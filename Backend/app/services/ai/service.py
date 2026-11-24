@@ -206,10 +206,13 @@ class AIAnalysisService:
             AIFunction.INTERPRET,
             AIFunction.REMEDIATE,
         ),
+        force: bool = False,
     ) -> list[AIAnalysis]:
         analyses: list[AIAnalysis] = []
         for function in functions:
-            analysis = await self._run_function(db, finding, function, user_id=user_id)
+            analysis = await self._run_function(
+                db, finding, function, user_id=user_id, force=force
+            )
             analyses.append(analysis)
         return analyses
 
@@ -220,6 +223,7 @@ class AIAnalysisService:
         function: AIFunction,
         *,
         user_id: int | None,
+        force: bool = False,
     ) -> AIAnalysis:
         prompt = await self._build_prompt(db, finding, function)
         return await self._execute_prompt(
@@ -229,6 +233,7 @@ class AIAnalysisService:
             finding=finding,
             assessment_id=finding.assessment_id,
             user_id=user_id,
+            force=force,
         )
 
     async def analyze_assessment_summary(
@@ -237,6 +242,7 @@ class AIAnalysisService:
         assessment: Assessment,
         *,
         user_id: int | None = None,
+        force: bool = False,
     ) -> AIAnalysis:
         prompt = await self._build_summary_prompt(db, assessment)
         return await self._execute_prompt(
@@ -246,6 +252,7 @@ class AIAnalysisService:
             finding=None,
             assessment_id=assessment.id,
             user_id=user_id,
+            force=force,
         )
 
     async def _execute_prompt(
@@ -257,27 +264,24 @@ class AIAnalysisService:
         finding: Finding | None,
         assessment_id: int,
         user_id: int | None,
+        force: bool = False,
     ) -> AIAnalysis:
+        # Provider-agnostic cache key: a successful result from either provider is reused.
         digest = hashlib.sha256(
-            "|".join(
-                [
-                    self.provider.name,
-                    self.provider.model,
-                    PROMPT_VERSION,
-                    prompt.user,
-                ]
-            ).encode("utf-8")
+            f"{PROMPT_VERSION}|{prompt.user}".encode()
         ).hexdigest()
 
-        cached = await db.scalar(
-            select(AIAnalysis)
-            .where(
-                AIAnalysis.input_hash == digest,
-                AIAnalysis.status == AIAnalysisStatus.SUCCESS,
+        cached = None
+        if not force:
+            cached = await db.scalar(
+                select(AIAnalysis)
+                .where(
+                    AIAnalysis.input_hash == digest,
+                    AIAnalysis.status == AIAnalysisStatus.SUCCESS,
+                )
+                .order_by(AIAnalysis.id.desc())
+                .limit(1)
             )
-            .order_by(AIAnalysis.id.desc())
-            .limit(1)
-        )
         if cached is not None and isinstance(cached.output, dict):
             analysis = AIAnalysis(
                 finding_id=finding.id if finding else None,
@@ -307,6 +311,7 @@ class AIAnalysisService:
         result: ProviderResult | None = None
         output: BaseModel | None = None
         error: str | None = None
+        attempts: list[dict[str, Any]] = []
         status = AIAnalysisStatus.SUCCESS
 
         try:
@@ -339,6 +344,7 @@ class AIAnalysisService:
                 else AIAnalysisStatus.FAILED
             )
             error = str(exc)[:2000]
+            attempts = list(getattr(exc, "attempts", None) or [])
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception(
                 "Unexpected AI failure for %s",
@@ -347,6 +353,8 @@ class AIAnalysisService:
             status = AIAnalysisStatus.FAILED
             error = f"unexpected AI failure: {type(exc).__name__}"
 
+        if result is not None:
+            attempts = list(result.attempts or [])
         latency_ms = int(
             max(0.0, (asyncio.get_running_loop().time() - started) * 1000)
         )
@@ -366,6 +374,7 @@ class AIAnalysisService:
             prompt_tokens=result.prompt_tokens if result else None,
             completion_tokens=result.completion_tokens if result else None,
             redaction_report=redaction_report,
+            attempts=attempts or None,
         )
         db.add(analysis)
         await db.flush()

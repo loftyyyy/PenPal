@@ -30,6 +30,7 @@ class AIAnalysisOut(BaseModel):
     prompt_tokens: int | None
     completion_tokens: int | None
     redaction_report: dict[str, Any] | None
+    attempts: list[dict[str, Any]] | None = None
     created_at: datetime
 
 
@@ -52,6 +53,10 @@ class BulkAnalyzeRequest(BaseModel):
     only_unanalyzed: bool = Field(
         default=True,
         description="Skip findings that already have a successful interpretation.",
+    )
+    force: bool = Field(
+        default=False,
+        description="Bypass the AI cache and regenerate analyses.",
     )
 
 

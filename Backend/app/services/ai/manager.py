@@ -39,6 +39,7 @@ class AIJob:
     requested_by: int
     total: int
     finding_ids: list[int] = field(default_factory=list, repr=False)
+    force: bool = False
     status: AIJobStatus = AIJobStatus.QUEUED
     processed: int = 0
     failed: int = 0
@@ -69,6 +70,7 @@ class AIAnalysisManager:
         assessment_id: int,
         requested_by: int,
         finding_ids: list[int],
+        force: bool = False,
     ) -> AIJob:
         for job in self._jobs.values():
             if job.assessment_id == assessment_id and job.status in {
@@ -84,6 +86,7 @@ class AIAnalysisManager:
             requested_by=requested_by,
             total=len(finding_ids),
             finding_ids=list(finding_ids),
+            force=force,
         )
         self._next_id += 1
         self._jobs[job.id] = job
@@ -120,7 +123,10 @@ class AIAnalysisManager:
                             job.failed += 1
                         else:
                             await self.service.analyze_finding(
-                                db, finding, user_id=job.requested_by
+                                db,
+                                finding,
+                                user_id=job.requested_by,
+                                force=job.force,
                             )
                             await db.commit()
                 except asyncio.CancelledError:

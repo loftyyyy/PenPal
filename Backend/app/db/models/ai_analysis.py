@@ -35,6 +35,7 @@ class AIAnalysis(TimestampMixin, Base):
     prompt_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     completion_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     redaction_report: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    attempts: Mapped[list[dict[str, Any]] | None] = mapped_column(sa.JSON)
 
     finding: Mapped["Finding | None"] = relationship(  # noqa: F821, UP037
         back_populates="ai_analyses"

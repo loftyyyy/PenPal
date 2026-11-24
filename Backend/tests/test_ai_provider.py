@@ -196,6 +196,10 @@ async def test_failover_uses_fallback_only_after_primary_failure() -> None:
     assert result.model == "fallback-model"
     assert len(primary.calls) == 1
     assert len(fallback.calls) == 1
+    assert [item["outcome"] for item in result.attempts or []] == [
+        "error",
+        "success",
+    ]
 
     primary_ok = ScriptedProvider(
         ['{"ok": true}'], name="primary", model="primary-model"
@@ -206,6 +210,44 @@ async def test_failover_uses_fallback_only_after_primary_failure() -> None:
     )
     assert result.provider == "primary"
     assert unused.calls == []
+
+
+async def test_failover_circuit_breaker_skips_primary_after_threshold() -> None:
+    clock = [0.0]
+    primary = ScriptedProvider(
+        [
+            ProviderError("down", transient=True),
+            ProviderError("down", transient=True),
+            ProviderError("down", transient=True),
+        ],
+        name="primary",
+        model="primary-model",
+    )
+    fallback = ScriptedProvider(
+        ['{"ok": true}'] * 4, name="fallback", model="fallback-model"
+    )
+    provider = FailoverProvider(
+        primary,
+        fallback,
+        failure_threshold=3,
+        cooldown_seconds=60,
+        clock=lambda: clock[0],
+    )
+    for _ in range(3):
+        await provider.complete_json("s", "u", max_tokens=10)
+    assert provider.circuit_open is True
+
+    result = await provider.complete_json("s", "u", max_tokens=10)
+    assert result.provider == "fallback"
+    assert len(primary.calls) == 3
+    assert result.attempts is not None
+    assert result.attempts[0]["outcome"] == "circuit_open"
+
+    clock[0] = 61.0
+    primary.outputs.append('{"ok": true}')
+    result = await provider.complete_json("s", "u", max_tokens=10)
+    assert result.provider == "primary"
+    assert len(primary.calls) == 4
 
 
 async def test_failover_reports_both_failures() -> None:

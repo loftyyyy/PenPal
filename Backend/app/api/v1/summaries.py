@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import (
     CurrentUser,
@@ -52,10 +52,11 @@ async def generate_summary(
     db: DbSession,
     user: CurrentUser,
     manager: AIManagerDep,
+    force: Annotated[bool, Query(description="Bypass the AI cache")] = False,
 ) -> SummaryOut:
     assessment = await get_assessment_or_404(db, assessment_id)
     summary = await service.generate_summary(
-        db, assessment, user, manager.service
+        db, assessment, user, manager.service, force=force
     )
     return _out(summary)
 
