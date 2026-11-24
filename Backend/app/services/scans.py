@@ -27,8 +27,14 @@ PROFILES: dict[ScanTool, set[str]] = {
     ScanTool.WHOIS: {"default"},
     ScanTool.WHATWEB: {"default"},
     ScanTool.CURL: {"default"},
+    ScanTool.HTTP_CHECKS: {
+        "config_baseline",
+        "session",
+        "access_control",
+        "auth_limited",
+    },
 }
-URL_TOOLS = {ScanTool.ZAP, ScanTool.WHATWEB, ScanTool.CURL}
+URL_TOOLS = {ScanTool.ZAP, ScanTool.WHATWEB, ScanTool.CURL, ScanTool.HTTP_CHECKS}
 ACTIVE_STATUSES = (ScanStatus.QUEUED, ScanStatus.RUNNING)
 
 
@@ -139,6 +145,7 @@ async def create_scan(
             "ports": ports,
             "requested_target": payload.target.strip(),
             "resolved_ips": decision.resolved_ips,
+            "confirm_lockout_test": payload.confirm_lockout_test,
         },
         created_by=user.id,
     )

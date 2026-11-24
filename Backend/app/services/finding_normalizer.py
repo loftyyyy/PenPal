@@ -611,6 +611,55 @@ async def normalize_whatweb_result(
     return {"created": created, "updated": updated, "total": created + updated}
 
 
+async def normalize_http_checks_result(
+    db: AsyncSession, scan: Scan, findings: list[dict[str, Any]]
+) -> dict[str, int]:
+    created = 0
+    updated = 0
+    for item in findings:
+        finding, was_created = await _upsert_finding(
+            db,
+            scan,
+            source=FindingSource.HTTP_CHECKS,
+            rule_id=str(item["rule_id"]),
+            title=str(item["title"]),
+            description=item.get("description"),
+            category=FindingCategory(item["category"]),
+            owasp_category=item.get("owasp_category"),
+            cwe=item.get("cwe"),
+            affected_url=item.get("affected_url"),
+            method=item.get("method"),
+            parameter=item.get("parameter"),
+            severity=Severity(item["severity"]),
+            confidence=item.get("confidence"),
+            raw=item.get("raw") or {},
+        )
+        evidence = item.get("evidence")
+        if evidence:
+            digest = hashlib.sha256(str(evidence).encode("utf-8")).hexdigest()
+            existing = await db.scalar(
+                select(Evidence.id).where(
+                    Evidence.finding_id == finding.id,
+                    Evidence.type == EvidenceType.HTTP_EXCHANGE,
+                    Evidence.sha256 == digest,
+                )
+            )
+            if existing is None:
+                db.add(
+                    Evidence(
+                        finding_id=finding.id,
+                        scan_id=scan.id,
+                        type=EvidenceType.HTTP_EXCHANGE,
+                        content=str(evidence),
+                        sha256=digest,
+                        created_by=scan.created_by,
+                    )
+                )
+        created += int(was_created)
+        updated += int(not was_created)
+    return {"created": created, "updated": updated, "total": created + updated}
+
+
 async def normalize_zap_result(
     db: AsyncSession, scan: Scan, document: dict[str, Any]
 ) -> dict[str, int]:

@@ -37,6 +37,7 @@ class ScanTool(StrEnum):
     WHOIS = "whois"
     WHATWEB = "whatweb"
     CURL = "curl"
+    HTTP_CHECKS = "http_checks"
 
 
 class NmapProfile(StrEnum):
@@ -62,6 +63,7 @@ class FindingSource(StrEnum):
     NMAP = "nmap"
     ZAP = "zap"
     WHATWEB = "whatweb"
+    HTTP_CHECKS = "http_checks"
     MANUAL = "manual"
 
 
@@ -118,6 +120,12 @@ class AIAnalysisStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     INVALID_OUTPUT = "invalid_output"
+
+
+class SummaryStatus(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    SUPERSEDED = "superseded"
 
 
 class AIConfidence(StrEnum):

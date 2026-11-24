@@ -62,16 +62,16 @@ Function: summarize a finished security assessment for its report.
 
 Use ONLY the assessor-confirmed findings and their final severities supplied in the data.
 Do not add findings, invent evidence, or describe unconfirmed issues as vulnerabilities.
+Do not invent an overall risk rating; the server derives it from the confirmed severities.
 
 Return a JSON object with exactly these fields:
 {
   "executive_summary": string,
   "key_risks": [string, ...],
-  "overall_risk": "critical" | "high" | "medium" | "low" | "info",
-  "recommended_actions": [string, ...]
+  "limitations_note": string or null
 }
-The summary is advisory prose for the report appendix. The assessor's findings,
-severities and remediation remain authoritative.
+The summary is advisory prose. The assessor's findings, severities and remediation
+remain authoritative, and the assessor must approve the summary before it is used.
 """
 
 INSTRUCTIONS = {

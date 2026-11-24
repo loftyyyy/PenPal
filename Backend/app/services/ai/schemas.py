@@ -35,5 +35,4 @@ class SummaryOutput(BaseModel):
 
     executive_summary: str = Field(min_length=1, max_length=6000)
     key_risks: list[str] = Field(min_length=1, max_length=10)
-    overall_risk: Severity
-    recommended_actions: list[str] = Field(min_length=1, max_length=10)
+    limitations_note: str | None = Field(default=None, max_length=2000)

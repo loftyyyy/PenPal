@@ -30,11 +30,9 @@ class MockProvider(AIProvider):
                 "key_risks": [
                     "Mock key risk derived only from the confirmed findings.",
                 ],
-                "overall_risk": "high",
-                "recommended_actions": [
-                    "Address the highest-severity confirmed findings first.",
-                    "Re-test fixed issues and update verification state.",
-                ],
+                "limitations_note": (
+                    "Mock summary is advisory and based on confirmed findings only."
+                ),
             }
         elif "FUNCTION: remediate" in user:
             payload = {

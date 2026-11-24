@@ -42,6 +42,13 @@ class ScanCreate(BaseModel):
         max_length=1000,
         description="Optional Nmap ports. Empty uses the profile's default port set.",
     )
+    confirm_lockout_test: bool = Field(
+        default=False,
+        description=(
+            "Only for http_checks auth_limited: explicitly allow a short lockout test "
+            "against configured test accounts."
+        ),
+    )
 
 
 class ScanQueuedOut(BaseModel):

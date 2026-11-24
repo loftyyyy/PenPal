@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -34,12 +35,14 @@ from app.services.external_runner import (
 from app.services.finding_normalizer import (
     WhatWebParseError,
     ZapParseError,
+    normalize_http_checks_result,
     normalize_nmap_result,
     normalize_whatweb_result,
     normalize_zap_result,
     parse_whatweb_document,
     parse_zap_document,
 )
+from app.services.http_checks import HttpCheckRunner
 from app.services.nmap_parser import NmapParseError, NmapResult, parse_nmap_xml
 from app.services.nmap_runner import (
     NmapRunError,
@@ -134,12 +137,14 @@ class ScanManager:
         nmap_runner: Any | None = None,
         zap_runner: Any | None = None,
         external_runner: ExternalToolRunner | None = None,
+        http_check_runner: HttpCheckRunner | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.nmap_runner = nmap_runner or NmapRunner(settings)
         self.zap_runner = zap_runner
         self.external_runner = external_runner
+        self.http_check_runner = http_check_runner
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._cancel_events: dict[int, asyncio.Event] = {}
         self._nmap_semaphore = asyncio.Semaphore(max(1, settings.nmap_max_concurrency))
@@ -269,6 +274,7 @@ class ScanManager:
                 await self._finish_cancelled(scan_id)
                 return
             progress = self._progress_callback(scan_id)
+            http_findings: list[dict[str, Any]] | None = None
 
             if scan.tool == ScanTool.NMAP:
                 async with self._nmap_semaphore:
@@ -326,6 +332,32 @@ class ScanManager:
                             cancel_event=cancel_event,
                         )
                     raw = RawOutput(data=result.raw, filename=result.filename)
+            elif scan.tool == ScanTool.HTTP_CHECKS:
+                if self.http_check_runner is None:
+                    await self._finish_failed(
+                        scan_id, "HTTP checks integration is not available"
+                    )
+                    return
+                async with self._external_semaphore:
+                    await progress(10)
+                    check_result = await self.http_check_runner.run(
+                        scan=scan,
+                        assessment=assessment,
+                        rules=rules,
+                        user_id=scan.created_by,
+                        confirm_lockout_test=bool(
+                            (scan.parameters or {}).get("confirm_lockout_test")
+                        ),
+                        cancel_event=cancel_event,
+                        progress=progress,
+                    )
+                http_findings = check_result.findings
+                raw = RawOutput(
+                    data=json.dumps(
+                        check_result.document, indent=2, default=str
+                    ).encode("utf-8"),
+                    filename="http_checks.json",
+                )
             else:  # pragma: no cover - model enum prevents this
                 await self._finish_failed(scan_id, f"unsupported tool {scan.tool}")
                 return
@@ -420,6 +452,7 @@ class ScanManager:
                 parsed=parsed,
                 document=document,
                 whatweb_entries=whatweb_entries,
+                http_findings=http_findings,
             )
             async with self.session_factory() as db:
                 fresh = await db.get(Scan, scan_id)
@@ -532,8 +565,14 @@ class ScanManager:
         parsed: NmapResult | None,
         document: dict[str, Any] | None,
         whatweb_entries: list[dict[str, Any]] | None,
+        http_findings: list[dict[str, Any]] | None,
     ) -> None:
-        if parsed is None and document is None and whatweb_entries is None:
+        if (
+            parsed is None
+            and document is None
+            and whatweb_entries is None
+            and http_findings is None
+        ):
             return
         try:
             async with self.session_factory() as db:
@@ -545,6 +584,10 @@ class ScanManager:
                 elif whatweb_entries is not None:
                     counts = await normalize_whatweb_result(
                         db, fresh, whatweb_entries
+                    )
+                elif http_findings is not None:
+                    counts = await normalize_http_checks_result(
+                        db, fresh, http_findings
                     )
                 else:
                     counts = await normalize_zap_result(db, fresh, document or {})
@@ -601,11 +644,13 @@ def get_scan_manager() -> ScanManager:
         from app.services.zap_runner import ZapScanRunner
 
         settings = get_settings()
+        session_factory = get_session_factory()
         _manager = ScanManager(
-            get_session_factory(),
+            session_factory,
             settings,
             zap_runner=ZapScanRunner(settings),
             external_runner=ExternalToolRunner(settings),
+            http_check_runner=HttpCheckRunner(settings, session_factory),
         )
     return _manager
 

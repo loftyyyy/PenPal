@@ -161,7 +161,7 @@ async def test_full_assessment_flow_with_mock_tools_and_ai(
     html = download.text
     assert "SQL Injection" in html
     assert "Manually reproduced the SQL error" in html
-    assert "Missing Anti-clickjacking Header" not in html
+    assert "UNVERIFIED: Missing Anti-clickjacking Header" in html
 
     audit = await client.get(
         f"/api/v1/assessments/{assessment_id}/audit-log",

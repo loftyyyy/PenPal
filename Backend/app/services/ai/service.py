@@ -545,7 +545,11 @@ class AIAnalysisService:
         severity_counts = {
             severity.value: 0 for severity in SEVERITY_ORDER
         }
+        category_counts: dict[str, int] = {}
         for finding in confirmed:
+            category_counts[finding.category.value] = (
+                category_counts.get(finding.category.value, 0) + 1
+            )
             if finding.final_severity is not None:
                 severity_counts[finding.final_severity.value] += 1
 
@@ -554,11 +558,13 @@ class AIAnalysisService:
                 "assessment": {
                     "name": assessment.name,
                     "target_name": assessment.target_name,
-                    "target_base_url": assessment.target_base_url,
                     "selected_categories": assessment.selected_categories,
                 },
-                "confirmed_counts": severity_counts,
-                "confirmed_total": len(confirmed),
+                "confirmed_counts": {
+                    "by_severity": severity_counts,
+                    "by_category": category_counts,
+                    "total": len(confirmed),
+                },
                 "findings": [
                     {
                         "title": finding.title,
@@ -569,8 +575,11 @@ class AIAnalysisService:
                             else None
                         ),
                         "affected_path": _relative_endpoint(finding.affected_url),
-                        "description": finding.description,
-                        "final_remediation": finding.final_remediation,
+                        "final_remediation_first_line": (
+                            (finding.final_remediation or "").strip().splitlines()[0][:300]
+                            if (finding.final_remediation or "").strip()
+                            else None
+                        ),
                     }
                     for finding in confirmed
                 ],

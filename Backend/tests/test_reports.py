@@ -179,9 +179,9 @@ async def test_html_report_contains_only_confirmed_escaped_findings(
     assert path.is_file()
     html = path.read_text(encoding="utf-8")
     assert "confirmed" in html
-    assert "PENDING-ONLY finding must not appear" not in html
+    assert "UNVERIFIED: PENDING-ONLY finding must not appear" in html
     assert "Rejected finding" not in html
-    assert "Needs retest finding" not in html
+    assert "UNVERIFIED: Needs retest finding" in html
     assert "&lt;script&gt;alert" in html
     assert '<script>alert("confirmed")</script>' not in html
     assert "&lt;img src=x onerror=alert(1)&gt;" in html

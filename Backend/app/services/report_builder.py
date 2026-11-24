@@ -20,7 +20,6 @@ from app.core.errors import AppError
 from app.db.base import utcnow
 from app.db.enums import (
     AIAnalysisStatus,
-    AIFunction,
     ReportFormat,
     ReportStatus,
     VerificationStatus,
@@ -229,6 +228,26 @@ async def _build_context(
                 )
             )
 
+    unverified = list(
+        (
+            await db.execute(
+                select(Finding)
+                .where(
+                    Finding.assessment_id == assessment.id,
+                    Finding.verification_status.in_(
+                        [
+                            VerificationStatus.PENDING,
+                            VerificationStatus.NEEDS_RETEST,
+                        ]
+                    ),
+                )
+                .order_by(Finding.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     scans = (
         (
             await db.execute(
@@ -307,15 +326,17 @@ async def _build_context(
                 continue
     redaction_summary = dict(sorted(redaction_summary.items()))
 
-    ai_summary = await db.scalar(
-        select(AIAnalysis)
-        .where(
-            AIAnalysis.assessment_id == assessment.id,
-            AIAnalysis.function == AIFunction.SUMMARY,
-            AIAnalysis.status == AIAnalysisStatus.SUCCESS,
-        )
-        .order_by(AIAnalysis.id.desc())
-        .limit(1)
+    from app.services.summaries import (
+        approved_summary,
+        list_summaries,
+        summary_key_risks,
+        summary_text,
+    )
+
+    approved = await approved_summary(db, assessment.id)
+    summary_rows = await list_summaries(db, assessment.id)
+    draft = next(
+        (row for row in summary_rows if row.status.value == "draft"), None
     )
 
     scope_in = [item for item in assessment.scope_items if item.in_scope]
@@ -340,6 +361,7 @@ async def _build_context(
         "selected_categories": assessment.selected_categories,
         "tool_summary": tool_summary,
         "findings": confirmed,
+        "unverified_findings": unverified,
         "evidence_by_finding": evidence_by_finding,
         "severity_rows": severity_rows,
         "confirmed_total": len(confirmed),
@@ -349,7 +371,27 @@ async def _build_context(
             ("Needs retest", verification_counts.get("needs_retest", 0)),
         ],
         "ai_usage": ai_usage,
-        "ai_summary": ai_summary,
+        "approved_summary": (
+            {
+                "text": summary_text(approved),
+                "key_risks": summary_key_risks(approved),
+                "overall_risk": (
+                    approved.overall_risk.value
+                    if approved.overall_risk
+                    else None
+                ),
+            }
+            if approved
+            else None
+        ),
+        "draft_summary": (
+            {
+                "text": summary_text(draft),
+                "key_risks": summary_key_risks(draft),
+            }
+            if draft
+            else None
+        ),
         "redaction_summary": redaction_summary,
         "scan_history": scans,
         "summary_counts": summary_counts,

@@ -78,7 +78,20 @@
     <p><strong>Tools and versions:</strong> {{ tool_summary if tool_summary else "No scans recorded." }}</p>
 
     <h2>3. Executive summary</h2>
+    <p class="muted">Server-generated facts (authoritative):</p>
     <p>{{ narrative }}</p>
+    {% if approved_summary %}
+    <h3>Approved assessment summary</h3>
+    <p><strong>Overall risk:</strong> {{ approved_summary.overall_risk or "not recorded" }}</p>
+    <p>{{ approved_summary.text }}</p>
+    {% if approved_summary.key_risks %}
+    <ul>
+      {% for risk in approved_summary.key_risks %}<li>{{ risk }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}
+    <p class="muted">Deterministic server summary (no AI summary has been approved).</p>
+    {% endif %}
     <table>
       <thead><tr><th>Severity</th><th>Confirmed findings</th></tr></thead>
       <tbody>
@@ -133,7 +146,7 @@
   </section>
 
   <section class="page-break">
-    <h2>Appendix A — Other verification outcomes</h2>
+    <h2>Appendix A — Unverified findings and other outcomes</h2>
     <table>
       <thead><tr><th>Verification status</th><th>Count</th></tr></thead>
       <tbody>
@@ -142,6 +155,24 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if unverified_findings %}
+    <h3>UNVERIFIED — not treated as vulnerabilities</h3>
+    <table>
+      <thead><tr><th>Title</th><th>Category</th><th>Status</th><th>AI-suggested</th><th>Tool severity</th><th>Endpoint</th></tr></thead>
+      <tbody>
+        {% for finding in unverified_findings %}
+        <tr>
+          <td>UNVERIFIED: {{ finding.title }}</td>
+          <td>{{ finding.category.value }}</td>
+          <td>{{ finding.verification_status.value }}</td>
+          <td>{{ finding.ai_suggested_severity.value if finding.ai_suggested_severity else "not available" }}</td>
+          <td>{{ finding.tool_severity.value if finding.tool_severity else "not available" }}</td>
+          <td>{{ finding.affected_url or "not recorded" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
 
     <h2>Appendix B — AI usage and data handling</h2>
     <p>
@@ -168,27 +199,25 @@
       {% for kind, count in redaction_summary.items() %}{{ kind }}={{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
     </p>
     {% endif %}
-    {% if ai_summary and ai_summary.output %}
-    <h3>AI-generated summary (advisory, appendix only)</h3>
+    {% if draft_summary %}
+    <h3>UNVERIFIED AI summary draft (not approved)</h3>
     <p class="muted">
-      This prose was generated from confirmed findings only. It is not the authoritative
-      executive summary and does not change any finding, severity or remediation.
+      This prose is an unapproved draft. It is not the authoritative executive summary
+      and does not change any finding, severity or remediation.
     </p>
-    <p><strong>Overall risk:</strong> {{ ai_summary.output.get("overall_risk", "not reported") }}</p>
-    <p>{{ ai_summary.output.get("executive_summary", "") }}</p>
-    {% if ai_summary.output.get("key_risks") %}
-    <h4>Key risks</h4>
+    <p>{{ draft_summary.text }}</p>
+    {% if draft_summary.key_risks %}
     <ul>
-      {% for risk in ai_summary.output.get("key_risks", []) %}<li>{{ risk }}</li>{% endfor %}
-    </ul>
-    {% endif %}
-    {% if ai_summary.output.get("recommended_actions") %}
-    <h4>Recommended actions</h4>
-    <ul>
-      {% for action in ai_summary.output.get("recommended_actions", []) %}<li>{{ action }}</li>{% endfor %}
+      {% for risk in draft_summary.key_risks %}<li>{{ risk }}</li>{% endfor %}
     </ul>
     {% endif %}
     {% endif %}
+    <h4>AI limitations</h4>
+    <p>
+      AI output is advisory and can be wrong or manipulated by target content. A human
+      assessor verified every confirmed finding and approved any summary used above.
+      Free hosted models have rate limits and may change or disappear.
+    </p>
 
     <h2>Appendix C — Scan log</h2>
     <table>

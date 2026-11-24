@@ -286,6 +286,18 @@ def sanitize_text(value: str | None, *, max_chars: int | None = None) -> Sanitiz
     return SanitizationResult(text=text, report=dict(sorted(counter.counts.items())))
 
 
+def redact_known_secrets(text: str, secrets: list[str] | tuple[str, ...]) -> str:
+    """Replace exact known test-account/session secrets before pattern redaction."""
+    redacted = text
+    for secret in sorted(
+        {value for value in secrets if value and len(value) >= 4},
+        key=len,
+        reverse=True,
+    ):
+        redacted = redacted.replace(secret, "[REDACTED_KNOWN_SECRET]")
+    return redacted
+
+
 def sanitize_data(value: Any, *, max_chars: int | None = None) -> tuple[Any, dict[str, int]]:
     """Recursively sanitise every string in a JSON-like structure.
 

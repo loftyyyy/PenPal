@@ -179,16 +179,9 @@ async def build_dashboard(
         for finding in top_rows
     ]
 
-    summary = await db.scalar(
-        select(AIAnalysis)
-        .where(
-            AIAnalysis.assessment_id == assessment_id,
-            AIAnalysis.function == AIFunction.SUMMARY,
-            AIAnalysis.status == AIAnalysisStatus.SUCCESS,
-        )
-        .order_by(AIAnalysis.id.desc())
-        .limit(1)
-    )
+    from app.services.summaries import approved_summary, summary_text
+
+    summary = await approved_summary(db, assessment_id)
 
     finding_updated: datetime | None = await db.scalar(
         select(func.max(Finding.updated_at)).where(
@@ -213,7 +206,25 @@ async def build_dashboard(
         ai_coverage=AICoverage(
             analyzed=analyzed, total=total, coverage_percent=coverage
         ),
-        ai_summary=summary,
+        ai_summary=(
+            {
+                "id": summary.id,
+                "assessment_id": summary.assessment_id,
+                "status": summary.status,
+                "provider": summary.provider,
+                "model": summary.model,
+                "output": summary.output,
+                "edited_text": summary.edited_text,
+                "text": summary_text(summary),
+                "overall_risk": summary.overall_risk,
+                "approved_by": summary.approved_by,
+                "approved_at": summary.approved_at,
+                "created_at": summary.created_at,
+                "updated_at": summary.updated_at,
+            }
+            if summary
+            else None
+        ),
         top_confirmed_findings=top_confirmed,
         last_updated_at=last_updated_at(assessment, finding_updated, scan_finished),
     )

@@ -17,11 +17,13 @@ from app.api.v1 import (
     dashboard,
     findings,
     health,
+    http_checks,
     meta,
     recon,
     reports,
     scans,
     scope,
+    summaries,
     users,
 )
 from app.core.config import get_settings
@@ -109,6 +111,7 @@ def create_app() -> FastAPI:
             {"name": "Scans", "description": "Nmap and ZAP scan lifecycle"},
             {"name": "Recon", "description": "Aggregated Nmap reconnaissance"},
             {"name": "Findings", "description": "Findings, verification and evidence"},
+            {"name": "HTTP Checks", "description": "Configuration, test accounts and HTTP checks"},
             {"name": "AI", "description": "Advisory AI interpretation and remediation"},
             {"name": "Dashboard", "description": "Aggregated assessment metrics"},
             {"name": "Reports", "description": "HTML and PDF report generation"},
@@ -138,7 +141,9 @@ def create_app() -> FastAPI:
     app.include_router(scans.router, prefix=settings.api_prefix)
     app.include_router(recon.router, prefix=settings.api_prefix)
     app.include_router(findings.router, prefix=settings.api_prefix)
+    app.include_router(http_checks.router, prefix=settings.api_prefix)
     app.include_router(ai.router, prefix=settings.api_prefix)
+    app.include_router(summaries.router, prefix=settings.api_prefix)
     app.include_router(dashboard.router, prefix=settings.api_prefix)
     app.include_router(audit.router, prefix=settings.api_prefix)
     app.include_router(reports.router, prefix=settings.api_prefix)

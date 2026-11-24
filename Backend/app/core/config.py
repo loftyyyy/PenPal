@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     first_admin_email: str = "admin@penpal.local"
     first_admin_password: str = "CHANGE_ME-admin-password"  # noqa: S105
+    credentials_key: str = ""
 
     cors_origins: str = "http://localhost:5173"
 
@@ -92,6 +93,10 @@ class Settings(BaseSettings):
     scan_timeout_whois_default_seconds: int = 120
     scan_timeout_whatweb_default_seconds: int = 300
     scan_timeout_curl_default_seconds: int = 120
+    scan_timeout_http_checks_config_baseline_seconds: int = 300
+    scan_timeout_http_checks_session_seconds: int = 300
+    scan_timeout_http_checks_access_control_seconds: int = 300
+    scan_timeout_http_checks_auth_limited_seconds: int = 300
 
     ai_provider: str = "mock"
     ai_base_url: str = ""
@@ -175,6 +180,8 @@ class Settings(BaseSettings):
             problems.append("FIRST_ADMIN_PASSWORD is a default or shorter than 12 characters")
         if self.zap_api_key.strip() in WEAK_SECRET_VALUES:
             problems.append("ZAP_API_KEY is a default value")
+        if self.is_production and not self.credentials_key.strip():
+            problems.append("CREDENTIALS_KEY is required in production")
         if self.ai_provider == "openai_compat" and not (
             self.ai_base_url and self.ai_model and self.ai_api_key
         ):
