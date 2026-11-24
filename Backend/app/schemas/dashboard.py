@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ai import AIAnalysisOut
+
 
 class SeverityCounts(BaseModel):
     critical: int = 0
@@ -65,5 +67,6 @@ class DashboardOut(BaseModel):
     category_counts: dict[str, int]
     scan_history: list[ScanHistoryItem]
     ai_coverage: AICoverage
+    ai_summary: AIAnalysisOut | None = None
     top_confirmed_findings: list[TopFinding]
     last_updated_at: datetime | None

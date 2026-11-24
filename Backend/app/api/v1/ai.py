@@ -14,7 +14,7 @@ from app.core.deps import (
     get_assessment_or_404,
     get_finding_or_404,
 )
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, NotFoundError
 from app.db.enums import (
     SEVERITY_ORDER,
     AIAnalysisStatus,
@@ -63,6 +63,46 @@ async def analyze_finding(
         finding_id=finding.id,
         analyses=[AIAnalysisOut.model_validate(analysis) for analysis in analyses],
     )
+
+
+@router.post(
+    "/assessments/{assessment_id}/analyze-summary",
+    response_model=AIAnalysisOut,
+    summary="Generate an advisory assessment summary",
+    description=(
+        "Summarizes only assessor-confirmed findings. The result is advisory and "
+        "appears in the report appendix, never in the authoritative executive summary."
+    ),
+)
+async def analyze_summary(
+    assessment_id: int,
+    db: DbSession,
+    user: CurrentUser,
+    manager: AIManagerDep,
+) -> AIAnalysisOut:
+    assessment = await get_assessment_or_404(db, assessment_id)
+    analysis = await manager.service.analyze_assessment_summary(
+        db, assessment, user_id=user.id
+    )
+    await db.commit()
+    return AIAnalysisOut.model_validate(analysis)
+
+
+@router.get(
+    "/assessments/{assessment_id}/ai-summary",
+    response_model=AIAnalysisOut,
+    summary="Latest advisory assessment summary",
+)
+async def get_ai_summary(
+    assessment_id: int,
+    db: DbSession,
+    user: CurrentUser,
+) -> AIAnalysisOut:
+    await get_assessment_or_404(db, assessment_id)
+    analysis = await _latest_summary(db, assessment_id)
+    if analysis is None:
+        raise NotFoundError("AI summary", assessment_id)
+    return AIAnalysisOut.model_validate(analysis)
 
 
 @router.post(
@@ -213,6 +253,21 @@ async def list_analyses(
         .all()
     )
     return [AIAnalysisOut.model_validate(row) for row in rows]
+
+
+async def _latest_summary(
+    db: AsyncSession, assessment_id: int
+) -> AIAnalysis | None:
+    return await db.scalar(
+        select(AIAnalysis)
+        .where(
+            AIAnalysis.assessment_id == assessment_id,
+            AIAnalysis.function == AIFunction.SUMMARY,
+            AIAnalysis.status == AIAnalysisStatus.SUCCESS,
+        )
+        .order_by(AIAnalysis.id.desc())
+        .limit(1)
+    )
 
 
 async def _successful_count(

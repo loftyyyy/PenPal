@@ -20,6 +20,7 @@ from app.core.errors import AppError
 from app.db.base import utcnow
 from app.db.enums import (
     AIAnalysisStatus,
+    AIFunction,
     ReportFormat,
     ReportStatus,
     VerificationStatus,
@@ -306,6 +307,17 @@ async def _build_context(
                 continue
     redaction_summary = dict(sorted(redaction_summary.items()))
 
+    ai_summary = await db.scalar(
+        select(AIAnalysis)
+        .where(
+            AIAnalysis.assessment_id == assessment.id,
+            AIAnalysis.function == AIFunction.SUMMARY,
+            AIAnalysis.status == AIAnalysisStatus.SUCCESS,
+        )
+        .order_by(AIAnalysis.id.desc())
+        .limit(1)
+    )
+
     scope_in = [item for item in assessment.scope_items if item.in_scope]
     scope_out = [item for item in assessment.scope_items if not item.in_scope]
     severity_rows = [
@@ -337,6 +349,7 @@ async def _build_context(
             ("Needs retest", verification_counts.get("needs_retest", 0)),
         ],
         "ai_usage": ai_usage,
+        "ai_summary": ai_summary,
         "redaction_summary": redaction_summary,
         "scan_history": scans,
         "summary_counts": summary_counts,

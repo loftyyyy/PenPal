@@ -1,4 +1,4 @@
-"""Strict output schemas for the two AI functions."""
+"""Strict output schemas for the AI functions."""
 
 from __future__ import annotations
 
@@ -28,3 +28,12 @@ class RemediateOutput(BaseModel):
     code_or_config_example: str | None = Field(default=None, max_length=8000)
     references: list[str] = Field(default_factory=list, max_length=20)
     effort: RemediationEffort
+
+
+class SummaryOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: str = Field(min_length=1, max_length=6000)
+    key_risks: list[str] = Field(min_length=1, max_length=10)
+    overall_risk: Severity
+    recommended_actions: list[str] = Field(min_length=1, max_length=10)

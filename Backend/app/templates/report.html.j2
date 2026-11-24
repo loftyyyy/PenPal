@@ -168,6 +168,27 @@
       {% for kind, count in redaction_summary.items() %}{{ kind }}={{ count }}{% if not loop.last %}, {% endif %}{% endfor %}
     </p>
     {% endif %}
+    {% if ai_summary and ai_summary.output %}
+    <h3>AI-generated summary (advisory, appendix only)</h3>
+    <p class="muted">
+      This prose was generated from confirmed findings only. It is not the authoritative
+      executive summary and does not change any finding, severity or remediation.
+    </p>
+    <p><strong>Overall risk:</strong> {{ ai_summary.output.get("overall_risk", "not reported") }}</p>
+    <p>{{ ai_summary.output.get("executive_summary", "") }}</p>
+    {% if ai_summary.output.get("key_risks") %}
+    <h4>Key risks</h4>
+    <ul>
+      {% for risk in ai_summary.output.get("key_risks", []) %}<li>{{ risk }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if ai_summary.output.get("recommended_actions") %}
+    <h4>Recommended actions</h4>
+    <ul>
+      {% for action in ai_summary.output.get("recommended_actions", []) %}<li>{{ action }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
 
     <h2>Appendix C — Scan log</h2>
     <table>

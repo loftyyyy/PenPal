@@ -20,7 +20,23 @@ class MockProvider(AIProvider):
         self.calls.append(
             {"system": system, "user": user, "max_tokens": str(max_tokens)}
         )
-        if "FUNCTION: remediate" in user:
+        if "FUNCTION: summary" in user:
+            payload = {
+                "executive_summary": (
+                    "Mock assessment summary: the assessor confirmed the supplied "
+                    "findings. This narrative is advisory and does not replace the "
+                    "finding records."
+                ),
+                "key_risks": [
+                    "Mock key risk derived only from the confirmed findings.",
+                ],
+                "overall_risk": "high",
+                "recommended_actions": [
+                    "Address the highest-severity confirmed findings first.",
+                    "Re-test fixed issues and update verification state.",
+                ],
+            }
+        elif "FUNCTION: remediate" in user:
             payload = {
                 "summary": "Mock remediation summary for the supplied finding.",
                 "steps": [

@@ -57,9 +57,27 @@ steps must be ordered and actionable. References are well-known sources and are 
 Do not change the finding's severity or verification state.
 """
 
+SUMMARY_INSTRUCTIONS = """\
+Function: summarize a finished security assessment for its report.
+
+Use ONLY the assessor-confirmed findings and their final severities supplied in the data.
+Do not add findings, invent evidence, or describe unconfirmed issues as vulnerabilities.
+
+Return a JSON object with exactly these fields:
+{
+  "executive_summary": string,
+  "key_risks": [string, ...],
+  "overall_risk": "critical" | "high" | "medium" | "low" | "info",
+  "recommended_actions": [string, ...]
+}
+The summary is advisory prose for the report appendix. The assessor's findings,
+severities and remediation remain authoritative.
+"""
+
 INSTRUCTIONS = {
     AIFunction.INTERPRET: INTERPRET_INSTRUCTIONS,
     AIFunction.REMEDIATE: REMEDIATE_INSTRUCTIONS,
+    AIFunction.SUMMARY: SUMMARY_INSTRUCTIONS,
 }
 
 

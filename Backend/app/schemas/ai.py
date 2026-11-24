@@ -15,7 +15,8 @@ class AIAnalysisOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    finding_id: int
+    finding_id: int | None
+    assessment_id: int | None
     function: AIFunction
     provider: str
     model: str

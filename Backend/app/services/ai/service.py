@@ -1,4 +1,4 @@
-"""Run the two advisory AI functions and persist every attempt."""
+"""Run the advisory AI functions and persist every attempt."""
 
 from __future__ import annotations
 
@@ -17,8 +17,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.db.enums import AIAnalysisStatus, AIFunction, EvidenceType, Severity
-from app.db.models import AIAnalysis, Assessment, Evidence, Finding
+from app.core.errors import AppError
+from app.db.enums import (
+    SEVERITY_ORDER,
+    AIAnalysisStatus,
+    AIFunction,
+    EvidenceType,
+    Severity,
+    VerificationStatus,
+)
+from app.db.models import AIAnalysis, Assessment, Evidence, Finding, Scan
 from app.services import audit
 from app.services.ai.base import AIProvider, ProviderError, ProviderResult
 from app.services.ai.failover import FailoverProvider
@@ -30,7 +38,7 @@ from app.services.ai.prompts import (
     build_system_prompt,
     build_user_prompt,
 )
-from app.services.ai.schemas import InterpretOutput, RemediateOutput
+from app.services.ai.schemas import InterpretOutput, RemediateOutput, SummaryOutput
 from app.services.sanitizer import sanitize_data, sanitize_text
 
 logger = logging.getLogger(__name__)
@@ -38,6 +46,7 @@ logger = logging.getLogger(__name__)
 OUTPUT_SCHEMAS: dict[AIFunction, type[BaseModel]] = {
     AIFunction.INTERPRET: InterpretOutput,
     AIFunction.REMEDIATE: RemediateOutput,
+    AIFunction.SUMMARY: SummaryOutput,
 }
 MAX_OUTPUT_TOKENS = 900
 EVIDENCE_ROWS = 5
@@ -213,6 +222,42 @@ class AIAnalysisService:
         user_id: int | None,
     ) -> AIAnalysis:
         prompt = await self._build_prompt(db, finding, function)
+        return await self._execute_prompt(
+            db,
+            prompt,
+            function=function,
+            finding=finding,
+            assessment_id=finding.assessment_id,
+            user_id=user_id,
+        )
+
+    async def analyze_assessment_summary(
+        self,
+        db: AsyncSession,
+        assessment: Assessment,
+        *,
+        user_id: int | None = None,
+    ) -> AIAnalysis:
+        prompt = await self._build_summary_prompt(db, assessment)
+        return await self._execute_prompt(
+            db,
+            prompt,
+            function=AIFunction.SUMMARY,
+            finding=None,
+            assessment_id=assessment.id,
+            user_id=user_id,
+        )
+
+    async def _execute_prompt(
+        self,
+        db: AsyncSession,
+        prompt: _Prompt,
+        *,
+        function: AIFunction,
+        finding: Finding | None,
+        assessment_id: int,
+        user_id: int | None,
+    ) -> AIAnalysis:
         digest = hashlib.sha256(
             "|".join(
                 [
@@ -235,7 +280,8 @@ class AIAnalysisService:
         )
         if cached is not None and isinstance(cached.output, dict):
             analysis = AIAnalysis(
-                finding_id=finding.id,
+                finding_id=finding.id if finding else None,
+                assessment_id=assessment_id,
                 function=function,
                 provider=cached.provider,
                 model=cached.model,
@@ -249,8 +295,9 @@ class AIAnalysisService:
             )
             db.add(analysis)
             await db.flush()
-            await self._apply_interpretation(finding, function, cached.output)
-            await self._audit(db, finding, analysis, user_id)
+            if finding is not None:
+                await self._apply_interpretation(finding, function, cached.output)
+            await self._audit(db, assessment_id, finding, analysis, user_id)
             return analysis
 
         system = build_system_prompt(function)
@@ -293,7 +340,10 @@ class AIAnalysisService:
             )
             error = str(exc)[:2000]
         except Exception as exc:  # pragma: no cover - defensive
-            logger.exception("Unexpected AI failure for finding %s", finding.id)
+            logger.exception(
+                "Unexpected AI failure for %s",
+                f"finding {finding.id}" if finding else f"assessment {assessment_id}",
+            )
             status = AIAnalysisStatus.FAILED
             error = f"unexpected AI failure: {type(exc).__name__}"
 
@@ -301,7 +351,8 @@ class AIAnalysisService:
             max(0.0, (asyncio.get_running_loop().time() - started) * 1000)
         )
         analysis = AIAnalysis(
-            finding_id=finding.id,
+            finding_id=finding.id if finding else None,
+            assessment_id=assessment_id,
             function=function,
             provider=(result.provider if result else None) or self.provider.name,
             model=(result.model if result else None) or self.provider.model,
@@ -318,9 +369,9 @@ class AIAnalysisService:
         )
         db.add(analysis)
         await db.flush()
-        if output is not None:
+        if finding is not None and output is not None:
             await self._apply_interpretation(finding, function, analysis.output or {})
-        await self._audit(db, finding, analysis, user_id)
+        await self._audit(db, assessment_id, finding, analysis, user_id)
         return analysis
 
     async def _call_provider(self, system: str, user: str) -> ProviderResult:
@@ -353,7 +404,8 @@ class AIAnalysisService:
     async def _audit(
         self,
         db: AsyncSession,
-        finding: Finding,
+        assessment_id: int,
+        finding: Finding | None,
         analysis: AIAnalysis,
         user_id: int | None,
     ) -> None:
@@ -361,9 +413,9 @@ class AIAnalysisService:
             db,
             "ai.analyzed",
             user_id=user_id,
-            assessment_id=finding.assessment_id,
-            entity_type="finding",
-            entity_id=finding.id,
+            assessment_id=assessment_id,
+            entity_type="finding" if finding else "assessment",
+            entity_id=finding.id if finding else assessment_id,
             details={
                 "function": analysis.function.value,
                 "status": analysis.status.value,
@@ -445,6 +497,101 @@ class AIAnalysisService:
             redaction_report=_merge_reports(
                 payload_report, raw_report, evidence_result.report
             ),
+        )
+
+    async def _build_summary_prompt(
+        self, db: AsyncSession, assessment: Assessment
+    ) -> _Prompt:
+        confirmed = (
+            (
+                await db.execute(
+                    select(Finding).where(
+                        Finding.assessment_id == assessment.id,
+                        Finding.verification_status == VerificationStatus.CONFIRMED,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not confirmed:
+            raise AppError(
+                409,
+                "no_confirmed_findings",
+                "No confirmed findings are available to summarize",
+            )
+        confirmed = sorted(
+            confirmed,
+            key=lambda finding: (
+                -(
+                    SEVERITY_ORDER[finding.final_severity]
+                    if finding.final_severity
+                    else 0
+                ),
+                finding.id,
+            ),
+        )
+        scans = (
+            (
+                await db.execute(
+                    select(Scan)
+                    .where(Scan.assessment_id == assessment.id)
+                    .order_by(Scan.created_at.asc(), Scan.id.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        severity_counts = {
+            severity.value: 0 for severity in SEVERITY_ORDER
+        }
+        for finding in confirmed:
+            if finding.final_severity is not None:
+                severity_counts[finding.final_severity.value] += 1
+
+        payload, payload_report = sanitize_data(
+            {
+                "assessment": {
+                    "name": assessment.name,
+                    "target_name": assessment.target_name,
+                    "target_base_url": assessment.target_base_url,
+                    "selected_categories": assessment.selected_categories,
+                },
+                "confirmed_counts": severity_counts,
+                "confirmed_total": len(confirmed),
+                "findings": [
+                    {
+                        "title": finding.title,
+                        "category": finding.category.value,
+                        "final_severity": (
+                            finding.final_severity.value
+                            if finding.final_severity
+                            else None
+                        ),
+                        "affected_path": _relative_endpoint(finding.affected_url),
+                        "description": finding.description,
+                        "final_remediation": finding.final_remediation,
+                    }
+                    for finding in confirmed
+                ],
+                "scans": [
+                    {
+                        "tool": scan.tool.value,
+                        "profile": scan.profile,
+                        "tool_version": scan.tool_version,
+                    }
+                    for scan in scans
+                ],
+            },
+            max_chars=RAW_FIELD_MAX_CHARS,
+        )
+        payload_json = json.dumps(payload, indent=2, sort_keys=True, default=str)
+        user = build_user_prompt(AIFunction.SUMMARY, payload_json)
+        return _Prompt(
+            system=build_system_prompt(AIFunction.SUMMARY),
+            user=user,
+            payload_json=payload_json,
+            redaction_report=payload_report,
         )
 
 

@@ -106,6 +106,7 @@ class EvidenceType(StrEnum):
 class AIFunction(StrEnum):
     INTERPRET = "interpret"
     REMEDIATE = "remediate"
+    SUMMARY = "summary"
 
 
 class AIAnalysisStatus(StrEnum):
