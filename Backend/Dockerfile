@@ -14,7 +14,7 @@ RUN apt-get update \
         whois \
         curl \
         ruby \
-        ruby-addressable \
+        ruby-rubygems \
         ca-certificates \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
@@ -27,6 +27,7 @@ RUN apt-get update \
         libffi8 \
         shared-mime-info \
         fonts-dejavu-core \
+    && gem install addressable -v 2.9.2 --no-document \
     && curl -fsSL https://github.com/urbanadventurer/WhatWeb/archive/refs/tags/v0.6.4.tar.gz \
         -o /tmp/whatweb.tar.gz \
     && mkdir -p /opt/whatweb \

@@ -28,13 +28,37 @@ This file tracks contract changes for the frontend. Generated schema:
 
 ## Phase 10 — tools
 
-- `ScanTool` adds `dig`, `whois`, `whatweb` (profiles: `default`).
+- `ScanTool` adds `dig`, `whois`, `whatweb`, `curl` and `http_checks`.
+- `dig`, `whois`, `whatweb`, `curl` profiles: `default`. `http_checks` profiles:
+  `config_baseline`, `session`, `access_control`, `auth_limited`.
 - `whois` is skipped for private/internal targets and completes with a note.
 - Raw output for these tools is text/JSON and stored like Nmap/ZAP output.
-- `GET /assessments/{id}/recon` adds DNS, WHOIS, technology and HTTP-check sections
-  (see the current schema).
+- `GET /assessments/{id}/recon` adds `dns`, `whois`, `technologies` and `http` sections.
+- `FindingSource` adds `whatweb` and `http_checks`.
 
-## Later phases
+## Phase 11 — HTTP checks
 
-- AI provider failover, attempt-chain fields and assessment-summary workflow are
-  documented here when their phase lands.
+- New `GET/PUT /assessments/{id}/http-check-config`.
+- New `GET/POST /assessments/{id}/test-accounts` and
+  `DELETE /assessments/{id}/test-accounts/{id}`. Passwords are write-only.
+- New endpoint `GET /evidence/{id}/download`; `EvidenceOut` adds `has_file` and
+  `download_url`.
+- `ScanCreate` adds `confirm_lockout_test` (default false).
+
+## Phase 12 — AI and summaries
+
+- New `POST /assessments/{id}/summary/generate`, `GET /assessments/{id}/summary`,
+  `PATCH /summaries/{id}`, `POST /summaries/{id}/approve`.
+- Old ad-hoc `/analyze-summary` and `/ai-summary` are not part of the final contract;
+  use the summary workflow.
+- `AIAnalysisOut` adds `assessment_id` and `attempts` (attempt chain).
+- `POST /findings/{id}/analyze` adds `?force=true`.
+- Bulk analysis body adds `force`.
+- Dashboard `ai_summary` is the approved summary only.
+- Report uses the approved summary; drafts go to the AI appendix.
+
+## Phase 13 — smoke
+
+- New `scripts/smoke_e2e.py` (live stack only, not pytest).
+- Compose `lsrs` placeholder and `LSRS_BASE_URL` TODO.
+- Audit log export and filters documented in Phase 9.

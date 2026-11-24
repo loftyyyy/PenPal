@@ -286,6 +286,81 @@ async def test_pdf_failure_keeps_html_report(
     assert b"Fallback finding" in download.content
 
 
+def test_report_helpers_and_pdf_renderer(monkeypatch, tmp_path: Path) -> None:
+    assert report_builder._truncate(None, 5) is None
+    assert report_builder._truncate("short", 10) == "short"
+    assert report_builder._truncate("abcdefgh", 3).startswith("abc")
+    assert "No findings were confirmed" in report_builder._narrative({}, 0)
+    narrative = report_builder._narrative({"high": 2, "low": 1}, 3)
+    assert "3 finding(s)" in narrative
+    assert "highest confirmed severity is high" in narrative
+
+    class FakeHTML:
+        def __init__(self, *, string: str, base_url: str) -> None:
+            assert "report" in string
+            assert base_url
+
+        def write_pdf(self, path: str) -> None:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_bytes(b"%PDF-fake")
+
+    class FakeWeasy:
+        HTML = FakeHTML
+
+    monkeypatch.setitem(__import__("sys").modules, "weasyprint", FakeWeasy)
+    target = tmp_path / "out" / "report.pdf"
+    report_builder._render_pdf("<html>report</html>", target)
+    assert target.read_bytes() == b"%PDF-fake"
+
+
+async def test_empty_report_is_generated(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    _, headers, assessment = await _setup(
+        client, db, email="reports-empty@example.test"
+    )
+    response = await client.post(
+        f"/api/v1/assessments/{assessment.id}/reports",
+        headers=headers,
+        json={"format": "html"},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["summary_counts"]["confirmed"] == 0
+    download = await client.get(
+        f"/api/v1/reports/{body['id']}/download", headers=headers
+    )
+    assert "No findings were confirmed" in download.text
+
+
+async def test_report_generation_failure_is_recorded(
+    client: AsyncClient, db: AsyncSession, monkeypatch
+) -> None:
+    _, headers, assessment = await _setup(
+        client, db, email="reports-failed@example.test"
+    )
+
+    def broken_render(**_context):
+        raise RuntimeError("template exploded")
+
+    monkeypatch.setattr(report_builder._template, "render", broken_render)
+    response = await client.post(
+        f"/api/v1/assessments/{assessment.id}/reports",
+        headers=headers,
+        json={"format": "html"},
+    )
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "report_generation_failed"
+    rows = (
+        (await db.execute(select(Report).where(Report.assessment_id == assessment.id)))
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].status is ReportStatus.FAILED
+    assert rows[0].error == "Report generation failed"
+
+
 async def test_report_download_requires_ready_file(
     client: AsyncClient, db: AsyncSession
 ) -> None:

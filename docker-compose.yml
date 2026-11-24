@@ -84,6 +84,15 @@ services:
     networks:
       - penpal_internal
 
+  # Real LSRS test copy placeholder. Prefer running LSRS as a container here so it
+  # is never exposed on the LAN; set LSRS_BASE_URL=http://lsrs:<port> in .env.
+  # TODO(team): set the image/address and port for the authorized LSRS copy.
+  # lsrs:
+  #   image: TODO-lsrs-image
+  #   profiles: ["lsrs"]
+  #   networks:
+  #     - penpal_internal
+
   # Optional local AI server. Opt in with:
   #   docker compose --profile local-ai up --build
   # Then set AI_PROVIDER=openai_compat, AI_BASE_URL=http://ollama:11434/v1,

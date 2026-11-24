@@ -2,6 +2,43 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-24 — Follow-up Phase 13: smoke test and handover
+
+- `scripts/smoke_e2e.py` runs the full flow against a live stack (login, assessment, scope, authorization, Nmap, dig, whois skip, WhatWeb, ZAP, HTTP config checks, AI analysis, L×I verification, summary generation/approval, dashboard, PDF download, audit). It exits non-zero on failure and is excluded from pytest.
+- Compose docs add the `lsrs` placeholder, `host.docker.internal` guidance and the rule that a host dev server bound to `127.0.0.1` is not reachable from containers. `LSRS_BASE_URL` is a TODO placeholder.
+- README and `docs/API_CHANGES.md` updated for the follow-up contract. `PROJECT_CONTEXT.md` synced in Task 0.
+- Not verified on this host: Docker build, real Nmap/dig/whois/WhatWeb/ZAP/HTTP checks, real Gemini/OpenRouter calls, WeasyPrint PDF. The smoke test is the team's acceptance gate for those.
+
+## 2026-11-24 — Follow-up Phase 12: AI chain, summary workflow, report appendix
+
+- Primary → fallback provider chain with bounded retries, circuit breaker (3 failures, 60s cooldown), attempt-chain persistence and provider-agnostic cache key. `?force=true` bypasses the cache.
+- Third AI function `summarize` uses confirmed findings only, aggregates counts, endpoint paths and first-line remediation, and never receives raw evidence.
+- Draft summary / edit / approve workflow in `assessment_summaries`; approval supersedes the previous approved summary. Zero confirmed findings produce a deterministic summary without an AI call.
+- Report body uses only an approved summary; deterministic facts remain authoritative; unapproved drafts and pending/needs-retest AI suggestions appear in labelled appendices with UNVERIFIED markers.
+- Tests cover failover, circuit breaker, attempt chain, force cache bypass, summary rules and report appendix behavior. Full suite: 255 passed.
+
+## 2026-11-24 — Follow-up Phase 11: HTTP checks
+
+- `http_checks` profiles: `config_baseline`, `session`, `access_control`, `auth_limited`, using httpx rather than a shell curl binary.
+- Configuration and write-only test accounts: roles are configurable (default staff/admin, no customer role); passwords are Fernet-encrypted with `CREDENTIALS_KEY`, never returned or logged, and redacted by exact match from evidence before AI/report use.
+- Every request and redirect re-enters the scope guard and is audited; methods are restricted, request/rate/login budgets are enforced, and redirects are followed manually with a cap.
+- Findings cover headers/CORS/banners/error pages/cookies, role access mistakes and authentication weaknesses. Evidence includes a redacted request/response summary and a curl-equivalent command with placeholders.
+- Tests use httpx MockTransport: baseline findings, session/access-control, user enumeration/weak password, out-of-scope redirect blocking, request budget, secret redaction and config/account API behavior.
+
+## 2026-11-24 — Follow-up Phase 10: dig, whois, WhatWeb and HTTP recon
+
+- Scan tools add `dig`, `whois`, `whatweb` (and a fixed `curl` fetch); dig uses the system resolver for A/AAAA/CNAME/MX/NS/TXT only.
+- whois is skipped for private/internal targets with a completed scan note and no subprocess; WhatWeb runs at aggression 1, JSON output, no redirects.
+- Raw output, hashes, cancellation, timeouts and scope checks reuse the scan manager. Recon adds DNS, WHOIS, technology and HTTP sections.
+- WhatWeb explicit version banners become `info` findings with stable fingerprints. Tests use fake runners plus parser fixtures.
+
+## 2026-11-24 — Follow-up Phase 9: contract changes
+
+- Likelihood/impact 1–5 on findings; server computes final severity with the team's bands. `final_severity` is read-only; confirmed requires L/I; confirmation can accept an AI remediation with an audit entry.
+- `GET /meta/severity-matrix`; dashboard now returns `severity_confirmed`, `severity_unverified` (ai/tool/total), `status_counts` and confirmed/unverified category counts. False positives are excluded from severity/category counts.
+- Audit filters (`action`, `entity_type`, `user_id`, `outcome`, `from`, `to`) and CSV/JSON export with formula-injection escaping.
+- Evidence file download adds hash/type checks and attachment disposition. `scripts/export_openapi.py` and `docs/API_CHANGES.md` added.
+
 ## 2026-11-24 — Phase 8: hardening and handover
 
 - Security review: secrets only from environment with production refusal, argon2 passwords, HS256 pinned by config validator, login throttling, strict Pydantic inputs, ORM/bound queries, no shell, generated-ID file paths, upload allowlists/signatures, generic error bodies, request IDs and redacting logs.

@@ -56,3 +56,14 @@ One line per non-obvious decision: what was chosen and why.
 - ZAP health checks use the same `X-ZAP-API-Key` header as the scan client, never a query parameter.
 - OpenAPI examples live on the request schemas (`LoginRequest`, assessment/scope/scan creation, manual finding, verification, bulk AI, reports) so the frontend generates useful types and sample calls.
 - The Docker image includes the extra Pango/GLib/HarfBuzz subset libraries and package data for the Jinja report template; PDF verification remains a container task.
+- Follow-up decisions: final severity is always server-computed from L×I; clients sending `final_severity` receive 422. Confirmed requires L/I; false positives clear L/I/final fields; needs-retest is optional and non-active.
+- False positives are excluded from severity and category counts. Confirmed severity drives the headline; pending/needs-retest are a separate unverified series using AI-suggested severity, then tool severity.
+- Confirming without final remediation accepts the latest successful AI remediation as-is and audits `accepted_ai_remediation`; with neither, confirmation is refused.
+- Audit CSV cells beginning `=`, `+`, `-` or `@` are prefixed with a quote to block spreadsheet formula injection. Audit filters use the existing JSON `allowed` field for scope outcomes.
+- whois runs only for public targets; because public targets are rejected, private/internal targets complete with a skip note and no external lookup. dig uses only the system resolver (no `@server`, no AXFR). WhatWeb uses aggression 1 and never follows redirects.
+- HTTP-check test-account passwords are Fernet-encrypted, write-only, and redacted by exact match before evidence/AI/report storage. `CREDENTIALS_KEY` is mandatory in production.
+- HTTP checks use httpx, not shell curl. Every request and manual redirect re-enters the scope guard and is audited; request/rate/login budgets are enforced in code.
+- The summary workflow stores drafts, edits and approvals. Only an approved summary is used in the report body; unapproved drafts and pending/needs-retest AI suggestions are labelled UNVERIFIED appendices. Zero confirmed findings use a deterministic summary and never call the AI.
+- AI results are cached provider-agnostically by sanitized prompt + prompt version. Failover attempts and the circuit state are recorded; `force=true` regenerates.
+- The public deployed LSRS URL is not enabled. Public targets remain rejected under `PROJECT_CONTEXT.md` §14 until the team records explicit authorization and changes that rule; use a Compose/LSRS private address or the placeholder.
+- `smoke_e2e.py` is a live-stack acceptance script, not pytest; real tools/PDF/provider calls are verified there on a Docker host.
