@@ -167,7 +167,9 @@ AI_FALLBACK_TIMEOUT_SECONDS=120
 
 The fallback is called only after a primary provider failure. Model names are environment
 variables and are never hard-coded. Free models may be rate-limited, change or disappear.
-Gemma is slower than Nemotron; the fallback has its own timeout and token budget.
+Gemma 4 31B is slow (often 15–60s) and timed out in later probes. A faster tested
+alternative is `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (~1s, valid JSON), and
+`meta/muse-glimmer-30b` (~15s). The fallback has its own timeout and token budget.
 Results are cached by prompt hash + prompt version across providers; use `?force=true`
 to bypass the cache. `scripts/check_ai_models.py` probes both live models without printing
 keys.

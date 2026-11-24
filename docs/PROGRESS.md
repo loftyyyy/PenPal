@@ -6,7 +6,7 @@ Newest entry first. Each phase ends with tests, a running app check, and a commi
 
 - OpenAI-compatible provider supports per-provider temperature, `top_p`, max tokens, extra request body and reasoning-content fallback.
 - Primary candidate `nvidia/nemotron-3-ultra-550b-a55b` with `chat_template_kwargs.enable_thinking=true`; fallback `google/gemma-4-31b-it` with its own token budget (1024) and timeout (120s).
-- Live probe: primary OK ~2–7s; fallback OK ~9–50s depending on load. Gemma at 4096/60s timed out, so fallback is capped at 1024 tokens and 120s.
+- Live probe: primary OK ~2–7s; Gemma fallback OK ~9–60s but timed out in later probes at 120s. Faster tested fallback candidates: `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` (~1s) and `meta/muse-glimmer-30b` (~15s).
 - Added `scripts/check_ai_models.py` (live only, never prints keys), `AI_*` request controls, and unit tests for extra body, reasoning content and fallback token budget.
 - Public targets now require both `ALLOW_PUBLIC_TARGETS=true` and an exact host in `ALLOWED_PUBLIC_TARGETS`; the team-authorized deployed LSRS host is prefilled as a commented/default allowlist value, but the switch stays false by default.
 - `PROJECT_CONTEXT.md` §14 records the narrow authorized-LSRS exception. All other public targets remain blocked.
