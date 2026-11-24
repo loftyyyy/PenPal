@@ -17,6 +17,7 @@ from app.api.v1 import (
     dashboard,
     findings,
     health,
+    meta,
     recon,
     reports,
     scans,
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
         openapi_url=None if settings.is_production else "/openapi.json",
         openapi_tags=[
             {"name": "Health", "description": "Liveness and dependency checks"},
+            {"name": "Metadata", "description": "Server-side constants such as the risk matrix"},
             {"name": "Auth", "description": "Login and current user"},
             {"name": "Users", "description": "Administrator user management"},
             {"name": "Assessments", "description": "Assessment registration and authorization"},
@@ -128,6 +130,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix=settings.api_prefix)
+    app.include_router(meta.router, prefix=settings.api_prefix)
     app.include_router(auth.router, prefix=settings.api_prefix)
     app.include_router(users.router, prefix=settings.api_prefix)
     app.include_router(assessments.router, prefix=settings.api_prefix)

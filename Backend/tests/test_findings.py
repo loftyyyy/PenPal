@@ -258,17 +258,32 @@ async def test_verify_rules_and_audit_history(
     assert rejected.json()["verification_status"] == "false_positive"
     assert rejected.json()["rejection_reason"] == "The endpoint is a static demo page."
     assert rejected.json()["final_severity"] is None
+    assert rejected.json()["likelihood"] is None
+    assert rejected.json()["impact"] is None
     assert rejected.json()["verified_by"] == user.id
 
-    confirmed = await client.patch(
+    missing_pair = await client.patch(
         f"/api/v1/findings/{finding.id}/verify",
         headers=headers,
         json={"decision": "confirmed", "final_remediation": "Escape output."},
     )
+    assert missing_pair.status_code == 422
+    assert "likelihood and impact" in missing_pair.json()["error"]["message"]
+
+    confirmed = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={
+            "decision": "confirmed",
+            "likelihood": 3,
+            "impact": 3,
+            "final_remediation": "Escape output.",
+        },
+    )
     assert confirmed.status_code == 200
     body = confirmed.json()
     assert body["verification_status"] == "confirmed"
-    assert body["final_severity"] == "high"
+    assert body["final_severity"] == "medium"
     assert body["final_remediation"] == "Escape output."
     assert body["rejection_reason"] is None
 
@@ -277,7 +292,8 @@ async def test_verify_rules_and_audit_history(
         headers=headers,
         json={
             "decision": "confirmed",
-            "final_severity": "critical",
+            "likelihood": 5,
+            "impact": 5,
             "final_remediation": "Use context-aware escaping.",
         },
     )
@@ -290,12 +306,13 @@ async def test_verify_rules_and_audit_history(
         json={
             "decision": "needs_retest",
             "reason": "Retest after the WAF change.",
-            "final_severity": "medium",
+            "likelihood": 2,
+            "impact": 2,
         },
     )
     assert needs_retest.status_code == 200
     assert needs_retest.json()["verification_status"] == "needs_retest"
-    assert needs_retest.json()["final_severity"] == "medium"
+    assert needs_retest.json()["final_severity"] == "low"
 
     rows = (
         (
@@ -311,10 +328,9 @@ async def test_verify_rules_and_audit_history(
     assert len(rows) == 4
     assert rows[1].details["previous"]["verification_status"] == "false_positive"
     assert rows[1].details["new"]["verification_status"] == "confirmed"
-    assert rows[1].details["severity_defaulted"] is True
-    assert rows[1].details["severity_source"] == "tool"
-    assert rows[2].details["severity_defaulted"] is False
-    assert rows[2].details["severity_source"] == "assessor"
+    assert rows[1].details["severity_source"] == "matrix"
+    assert rows[1].details["accepted_ai_remediation"] is False
+    assert rows[2].details["severity_source"] == "matrix"
 
 
 async def test_confirmed_uses_likelihood_impact_matrix(
@@ -331,12 +347,17 @@ async def test_confirmed_uses_likelihood_impact_matrix(
         json={"decision": "confirmed", "likelihood": 4},
     )
     assert missing_pair.status_code == 422
-    assert "both likelihood and impact" in missing_pair.json()["error"]["message"]
+    assert "requires likelihood and impact" in missing_pair.json()["error"]["message"]
 
     response = await client.patch(
         f"/api/v1/findings/{finding.id}/verify",
         headers=headers,
-        json={"decision": "confirmed", "likelihood": 4, "impact": 4},
+        json={
+            "decision": "confirmed",
+            "likelihood": 4,
+            "impact": 4,
+            "final_remediation": "Fix it after verification.",
+        },
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -354,7 +375,6 @@ async def test_confirmed_uses_likelihood_impact_matrix(
     ).scalars()
     row = next(audit)
     assert row.details["severity_source"] == "matrix"
-    assert row.details["severity_defaulted"] is False
     assert row.details["new"]["likelihood"] == 4
     assert row.details["new"]["impact"] == 4
 
@@ -366,14 +386,14 @@ async def test_confirmed_uses_likelihood_impact_matrix(
             "final_severity": "critical",
             "likelihood": 2,
             "impact": 2,
+            "final_remediation": "Fix it.",
         },
     )
-    assert overridden.status_code == 200
-    assert overridden.json()["final_severity"] == "critical"
-    assert overridden.json()["likelihood"] == 2
+    assert overridden.status_code == 422
+    assert "read-only" in overridden.json()["error"]["message"]
 
 
-async def test_confirmed_without_any_severity_is_rejected(
+async def test_confirmed_requires_client_likelihood_and_impact(
     client: AsyncClient, db: AsyncSession
 ) -> None:
     _, headers, assessment = await _setup(client, db)
@@ -387,7 +407,51 @@ async def test_confirmed_without_any_severity_is_rejected(
         json={"decision": "confirmed"},
     )
     assert response.status_code == 422
-    assert "final_severity" in response.json()["error"]["message"]
+    assert "likelihood and impact" in response.json()["error"]["message"]
+
+    client_severity = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={
+            "decision": "confirmed",
+            "likelihood": 4,
+            "impact": 4,
+            "final_severity": "critical",
+            "final_remediation": "Fix it.",
+        },
+    )
+    assert client_severity.status_code == 422
+    assert "read-only" in client_severity.json()["error"]["message"]
+
+
+async def test_confirmed_accepts_ai_remediation_when_omitted(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    _, headers, assessment = await _setup(client, db)
+    finding = await create_finding(db, assessment, title="AI remediation finding")
+    analyzed = await client.post(
+        f"/api/v1/findings/{finding.id}/analyze", headers=headers
+    )
+    assert analyzed.status_code == 200
+
+    response = await client.patch(
+        f"/api/v1/findings/{finding.id}/verify",
+        headers=headers,
+        json={"decision": "confirmed", "likelihood": 3, "impact": 3},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["final_remediation"] == (
+        "Mock remediation summary for the supplied finding."
+    )
+    audit = (
+        await db.execute(
+            select(AuditLog)
+            .where(AuditLog.action == "finding.verified")
+            .order_by(AuditLog.id.desc())
+        )
+    ).scalars()
+    row = next(audit)
+    assert row.details["accepted_ai_remediation"] is True
 
 
 async def test_ai_analysis_never_overwrites_verified_fields(
@@ -402,7 +466,8 @@ async def test_ai_analysis_never_overwrites_verified_fields(
         headers=headers,
         json={
             "decision": "confirmed",
-            "final_severity": "critical",
+            "likelihood": 5,
+            "impact": 5,
             "final_remediation": "Assessor decision.",
         },
     )

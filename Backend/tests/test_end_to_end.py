@@ -122,7 +122,8 @@ async def test_full_assessment_flow_with_mock_tools_and_ai(
         headers=headers,
         json={
             "decision": "confirmed",
-            "final_severity": "critical",
+            "likelihood": 5,
+            "impact": 5,
             "final_remediation": "Use parameterised queries.",
         },
     )
@@ -136,9 +137,9 @@ async def test_full_assessment_flow_with_mock_tools_and_ai(
     assert dashboard.status_code == 200
     dashboard_body = dashboard.json()
     assert dashboard_body["total_findings"] == 10
-    assert dashboard_body["verification_counts"]["confirmed"] == 1
-    assert dashboard_body["verification_counts"]["pending"] == 9
-    assert dashboard_body["severity_counts"]["critical"] == 1
+    assert dashboard_body["status_counts"]["confirmed"] == 1
+    assert dashboard_body["status_counts"]["pending"] == 9
+    assert dashboard_body["severity_confirmed"]["critical"] == 1
     assert dashboard_body["ai_coverage"]["analyzed"] == 10
     assert dashboard_body["top_confirmed_findings"][0]["id"] == sqli["id"]
 

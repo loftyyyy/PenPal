@@ -12,7 +12,7 @@ from app.db.enums import (
     Severity,
     VerificationStatus,
 )
-from app.db.models import AIAnalysis, Scan
+from app.db.models import AIAnalysis, AuditLog, Scan
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from tests.utils import (
@@ -110,24 +110,44 @@ async def test_dashboard_counts_basis_coverage_and_history(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["total_findings"] == 4
-    assert body["severity_counts"] == {
+    assert body["severity_confirmed"] == {
         "critical": 0,
         "high": 1,
         "medium": 0,
         "low": 0,
         "info": 0,
     }
-    assert "Only confirmed findings contribute" in body["severity_basis"]
-    assert body["verification_counts"] == {
+    assert body["severity_unverified"]["ai"] == {
+        "critical": 1,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
+    assert body["severity_unverified"]["tool"] == {
+        "critical": 0,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
+    assert body["severity_unverified"]["total"] == {
+        "critical": 1,
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
+    assert "False positives are excluded" in body["severity_basis"]
+    assert body["status_counts"] == {
         "pending": 2,
         "confirmed": 1,
         "false_positive": 1,
         "needs_retest": 0,
     }
     assert body["category_counts"] == {
-        "injection": 2,
-        "access_control": 1,
-        "security_configuration": 1,
+        "confirmed": {"injection": 1},
+        "unverified": {"injection": 1, "access_control": 1},
     }
     assert body["ai_coverage"] == {
         "analyzed": 1,
@@ -162,20 +182,25 @@ async def test_dashboard_for_empty_assessment(
     assert response.status_code == 200
     body = response.json()
     assert body["total_findings"] == 0
-    assert body["severity_counts"] == {
+    assert body["severity_confirmed"] == {
         "critical": 0,
         "high": 0,
         "medium": 0,
         "low": 0,
         "info": 0,
     }
-    assert body["verification_counts"] == {
+    assert body["severity_unverified"] == {
+        "ai": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
+        "tool": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
+        "total": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
+    }
+    assert body["status_counts"] == {
         "pending": 0,
         "confirmed": 0,
         "false_positive": 0,
         "needs_retest": 0,
     }
-    assert body["category_counts"] == {}
+    assert body["category_counts"] == {"confirmed": {}, "unverified": {}}
     assert body["scan_history"] == []
     assert body["ai_coverage"] == {
         "analyzed": 0,
@@ -212,7 +237,8 @@ async def test_audit_log_is_paginated_newest_first(
         headers=headers,
         json={
             "decision": "confirmed",
-            "final_severity": "medium",
+            "likelihood": 3,
+            "impact": 3,
             "final_remediation": "Fix it.",
         },
     )
@@ -244,3 +270,103 @@ async def test_audit_log_is_paginated_newest_first(
 
     unknown = await client.get("/api/v1/assessments/9999/audit-log", headers=headers)
     assert unknown.status_code == 404
+
+
+async def test_audit_filters_and_exports(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    user, headers, assessment = await _setup(
+        client, db, email="audit-filters@example.test"
+    )
+    db.add_all(
+        [
+            AuditLog(
+                assessment_id=assessment.id,
+                user_id=user.id,
+                action="scope.checked",
+                entity_type="scan_target",
+                entity_id="allowed-target",
+                details={"allowed": True},
+            ),
+            AuditLog(
+                assessment_id=assessment.id,
+                user_id=user.id,
+                action="scope.checked",
+                entity_type="scan_target",
+                entity_id="denied-target",
+                details={"allowed": False},
+            ),
+            AuditLog(
+                assessment_id=assessment.id,
+                user_id=user.id,
+                action="scan.scope_denied",
+                entity_type="scan",
+                entity_id="1",
+                details={"reasons": ["out of scope"]},
+            ),
+            AuditLog(
+                assessment_id=assessment.id,
+                user_id=user.id,
+                action="=HYPERLINK(\"http://evil.test\")",
+                entity_type="+SUM",
+                entity_id="-1",
+                details={"note": "@formula"},
+            ),
+        ]
+    )
+    await db.commit()
+
+    base = f"/api/v1/assessments/{assessment.id}/audit-log"
+    allowed = await client.get(
+        base, headers=headers, params={"outcome": "allowed"}
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["total"] == 1
+    assert allowed.json()["items"][0]["entity_id"] == "allowed-target"
+
+    denied = await client.get(
+        base, headers=headers, params={"outcome": "denied"}
+    )
+    assert denied.json()["total"] == 2
+
+    by_action = await client.get(
+        base, headers=headers, params={"action": "scan.scope_denied"}
+    )
+    assert by_action.json()["total"] == 1
+
+    by_entity = await client.get(
+        base, headers=headers, params={"entity_type": "scan_target"}
+    )
+    assert by_entity.json()["total"] == 2
+
+    by_user = await client.get(base, headers=headers, params={"user_id": user.id})
+    assert by_user.json()["total"] == 4
+
+    dated = await client.get(
+        base,
+        headers=headers,
+        params={"from": "2000-01-01T00:00:00Z", "to": "2100-01-01T00:00:00Z"},
+    )
+    assert dated.json()["total"] == 4
+
+    csv_export = await client.get(
+        f"{base}/export", headers=headers, params={"format": "csv"}
+    )
+    assert csv_export.status_code == 200
+    assert csv_export.headers["content-type"].startswith("text/csv")
+    assert "attachment" in csv_export.headers["content-disposition"]
+    text = csv_export.text
+    assert "'=HYPERLINK" in text
+    assert "'+SUM" in text
+    assert "'-1" in text
+
+    json_export = await client.get(
+        f"{base}/export", headers=headers, params={"format": "json"}
+    )
+    assert json_export.status_code == 200
+    payload = json_export.json()
+    assert len(payload) == 4
+    assert {"action", "details", "created_at"} <= set(payload[0])
+
+    unauthenticated = await client.get(f"{base}/export?format=csv")
+    assert unauthenticated.status_code == 401

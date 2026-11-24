@@ -4,15 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.db.base import utcnow
-from app.db.enums import Severity, VerificationDecision, VerificationStatus
-from app.db.models import Finding, User
+from app.db.enums import (
+    AIAnalysisStatus,
+    AIFunction,
+    VerificationDecision,
+    VerificationStatus,
+)
+from app.db.models import AIAnalysis, Finding, User
 from app.schemas.findings import FindingVerify
 from app.services import audit
-from app.services.risk_matrix import severity_for_risk, validate_scale
+from app.services.severity import severity_for_risk, validate_scale
 
 MIN_REJECTION_REASON = 10
 
@@ -43,18 +49,19 @@ async def verify_finding(
     previous = _state(finding)
     decision = payload.decision
     reason = (payload.reason or "").strip()
+    if payload.final_severity is not None:
+        raise _invalid(
+            "final_severity is read-only; the server computes it from likelihood and "
+            "impact"
+        )
     likelihood = validate_scale("likelihood", payload.likelihood)
     impact = validate_scale("impact", payload.impact)
-    if (likelihood is None) != (impact is None):
-        raise _invalid("Provide both likelihood and impact, or neither")
     matrix_severity = (
         severity_for_risk(likelihood, impact)
         if likelihood is not None and impact is not None
         else None
     )
-
-    severity_defaulted = False
-    severity_source: str | None = None
+    accepted_ai_remediation = False
 
     if decision == VerificationDecision.FALSE_POSITIVE:
         if len(reason) < MIN_REJECTION_REASON:
@@ -66,47 +73,56 @@ async def verify_finding(
         finding.rejection_reason = reason
         finding.final_severity = None
         finding.final_remediation = None
-        finding.likelihood = likelihood
-        finding.impact = impact
-        severity_source = "none"
+        finding.likelihood = None
+        finding.impact = None
     elif decision == VerificationDecision.CONFIRMED:
-        if payload.final_severity is not None:
-            final_severity = payload.final_severity
-            severity_source = "assessor"
-        elif matrix_severity is not None:
-            final_severity = matrix_severity
-            severity_source = "matrix"
-        elif finding.ai_suggested_severity is not None:
-            final_severity = finding.ai_suggested_severity
-            severity_source = "ai"
-            severity_defaulted = True
-        elif finding.tool_severity is not None:
-            final_severity = finding.tool_severity
-            severity_source = "tool"
-            severity_defaulted = True
-        else:
+        if likelihood is None or impact is None or matrix_severity is None:
             raise _invalid(
-                "A confirmed finding needs final_severity, a likelihood/impact pair, "
-                "or an AI/tool severity to fall back to"
+                "A confirmed finding requires likelihood and impact (1-5)"
+            )
+        final_remediation = (payload.final_remediation or "").strip() or None
+        if final_remediation is None:
+            ai_remediation = await db.scalar(
+                select(AIAnalysis)
+                .where(
+                    AIAnalysis.finding_id == finding.id,
+                    AIAnalysis.function == AIFunction.REMEDIATE,
+                    AIAnalysis.status == AIAnalysisStatus.SUCCESS,
+                )
+                .order_by(AIAnalysis.id.desc())
+                .limit(1)
+            )
+            if ai_remediation is not None and isinstance(
+                ai_remediation.output, dict
+            ):
+                candidate = ai_remediation.output.get("summary")
+                if not candidate:
+                    try:
+                        candidate = "\n".join(
+                            str(step)
+                            for step in ai_remediation.output.get("steps", [])
+                        )
+                    except TypeError:
+                        candidate = None
+                final_remediation = str(candidate).strip() if candidate else None
+                accepted_ai_remediation = final_remediation is not None
+        if final_remediation is None:
+            raise _invalid(
+                "A confirmed finding needs final_remediation or an existing AI "
+                "remediation to accept"
             )
         finding.verification_status = VerificationStatus.CONFIRMED
-        finding.final_severity = Severity(final_severity)
-        finding.final_remediation = payload.final_remediation
+        finding.final_severity = matrix_severity
+        finding.final_remediation = final_remediation
         finding.rejection_reason = None
         finding.likelihood = likelihood
         finding.impact = impact
     else:
         finding.verification_status = VerificationStatus.NEEDS_RETEST
-        if payload.final_severity is not None:
-            finding.final_severity = payload.final_severity
-            severity_source = "assessor"
-        elif matrix_severity is not None:
-            finding.final_severity = matrix_severity
-            severity_source = "matrix"
-        else:
-            finding.final_severity = None
-            severity_source = "none"
-        finding.final_remediation = payload.final_remediation
+        finding.final_severity = matrix_severity
+        finding.final_remediation = (
+            (payload.final_remediation or "").strip() or None
+        )
         finding.rejection_reason = reason or None
         finding.likelihood = likelihood
         finding.impact = impact
@@ -125,8 +141,8 @@ async def verify_finding(
             "decision": decision.value,
             "previous": previous,
             "new": _state(finding),
-            "severity_defaulted": severity_defaulted,
-            "severity_source": severity_source,
+            "severity_source": "matrix" if matrix_severity is not None else "none",
+            "accepted_ai_remediation": accepted_ai_remediation,
         },
     )
     await db.commit()

@@ -306,7 +306,7 @@ async def _seed_demo(db, admin: User) -> None:
     injection.verified_at = now
     clickjacking.verification_status = VerificationStatus.CONFIRMED
     clickjacking.final_severity = Severity.MEDIUM
-    clickjacking.likelihood = 3
+    clickjacking.likelihood = 2
     clickjacking.impact = 3
     clickjacking.final_remediation = "Send X-Frame-Options or frame-ancestors."
     clickjacking.verified_by = admin.id
@@ -314,7 +314,7 @@ async def _seed_demo(db, admin: User) -> None:
     cookie.verification_status = VerificationStatus.CONFIRMED
     cookie.final_severity = Severity.LOW
     cookie.likelihood = 2
-    cookie.impact = 3
+    cookie.impact = 2
     cookie.final_remediation = "Set HttpOnly and Secure on session cookies."
     cookie.verified_by = admin.id
     cookie.verified_at = now

@@ -24,6 +24,17 @@ class VerificationCounts(BaseModel):
     needs_retest: int = 0
 
 
+class UnverifiedSeverityCounts(BaseModel):
+    ai: SeverityCounts = Field(default_factory=SeverityCounts)
+    tool: SeverityCounts = Field(default_factory=SeverityCounts)
+    total: SeverityCounts = Field(default_factory=SeverityCounts)
+
+
+class CategoryCounts(BaseModel):
+    confirmed: dict[str, int] = Field(default_factory=dict)
+    unverified: dict[str, int] = Field(default_factory=dict)
+
+
 class ScanHistoryItem(BaseModel):
     id: int
     tool: str
@@ -52,19 +63,24 @@ class DashboardOut(BaseModel):
     assessment_id: int
     generated_at: datetime
     total_findings: int
-    severity_counts: SeverityCounts
+    severity_confirmed: SeverityCounts
+    severity_unverified: UnverifiedSeverityCounts
     severity_basis: str = Field(
         default=(
-            "Only confirmed findings contribute to severity counts, using the "
-            "assessor's final severity."
+            "Confirmed findings use the server-computed final severity. Unverified "
+            "findings are shown separately using AI-suggested severity when present, "
+            "otherwise tool severity. False positives are excluded from severity "
+            "counts."
         ),
         description=(
-            "Only confirmed findings contribute to severity counts, using the "
-            "assessor's final severity."
+            "Confirmed findings use the server-computed final severity. Unverified "
+            "findings are shown separately using AI-suggested severity when present, "
+            "otherwise tool severity. False positives are excluded from severity "
+            "counts."
         ),
     )
-    verification_counts: VerificationCounts
-    category_counts: dict[str, int]
+    status_counts: VerificationCounts
+    category_counts: CategoryCounts
     scan_history: list[ScanHistoryItem]
     ai_coverage: AICoverage
     ai_summary: AIAnalysisOut | None = None

@@ -33,6 +33,10 @@ class ScopeKind(StrEnum):
 class ScanTool(StrEnum):
     NMAP = "nmap"
     ZAP = "zap"
+    DIG = "dig"
+    WHOIS = "whois"
+    WHATWEB = "whatweb"
+    CURL = "curl"
 
 
 class NmapProfile(StrEnum):
@@ -142,3 +146,8 @@ class VerificationDecision(StrEnum):
     CONFIRMED = "confirmed"
     FALSE_POSITIVE = "false_positive"
     NEEDS_RETEST = "needs_retest"
+
+
+class AuditOutcome(StrEnum):
+    ALLOWED = "allowed"
+    DENIED = "denied"
