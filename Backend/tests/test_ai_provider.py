@@ -72,6 +72,66 @@ async def test_request_shape_and_auth_header() -> None:
     assert body["response_format"] == {"type": "json_object"}
 
 
+async def test_temperature_top_p_extra_body_and_token_budget() -> None:
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_completion("{}"))
+
+    provider = _provider(
+        handler,
+        ai_temperature=0.7,
+        ai_top_p=0.9,
+        ai_extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+    )
+    await provider.complete_json("s", "u", max_tokens=4096)
+    assert bodies[0]["temperature"] == 0.7
+    assert bodies[0]["top_p"] == 0.9
+    assert bodies[0]["max_tokens"] == 4096
+    assert bodies[0]["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+async def test_nvidia_reasoning_content_is_used_only_when_content_is_empty() -> None:
+    def reasoning_only(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "reasoning_content": '{"executive_summary": "ok"}',
+                        }
+                    }
+                ]
+            },
+        )
+
+    result = await _provider(reasoning_only).complete_json(
+        "s", "u", max_tokens=100
+    )
+    assert result.content == '{"executive_summary": "ok"}'
+
+    def both(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"ok": true}',
+                            "reasoning_content": "internal reasoning",
+                        }
+                    }
+                ]
+            },
+        )
+
+    result = await _provider(both).complete_json("s", "u", max_tokens=100)
+    assert result.content == '{"ok": true}'
+
+
 async def test_response_format_is_dropped_after_bad_request() -> None:
     bodies: list[dict] = []
 
@@ -210,6 +270,18 @@ async def test_failover_uses_fallback_only_after_primary_failure() -> None:
     )
     assert result.provider == "primary"
     assert unused.calls == []
+
+
+async def test_fallback_uses_its_own_token_budget() -> None:
+    primary = ScriptedProvider(
+        [ProviderError("down", transient=True)], name="primary"
+    )
+    fallback = ScriptedProvider(['{"ok": true}'], name="fallback")
+    provider = FailoverProvider(
+        primary, fallback, fallback_max_tokens=128
+    )
+    await provider.complete_json("s", "u", max_tokens=4096)
+    assert fallback.calls[0]["max_tokens"] == "128"
 
 
 async def test_failover_circuit_breaker_skips_primary_after_threshold() -> None:

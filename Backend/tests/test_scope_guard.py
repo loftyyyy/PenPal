@@ -437,18 +437,59 @@ def test_nmap_target_accepts_bare_host_and_port() -> None:
     assert target.port == 8080
 
 
-def test_public_targets_can_be_enabled_explicitly() -> None:
-    # Covered as a policy switch only; this is never used in the course project.
+def test_public_targets_require_exact_allowlist() -> None:
     import asyncio
 
-    settings = make_settings(allow_public_targets=True)
-    guard = ScopeGuard(settings, FakeResolver({}))
-    decision = asyncio.run(
-        guard.check(
+    denied_settings = make_settings(allow_public_targets=True)
+    denied = asyncio.run(
+        ScopeGuard(denied_settings, FakeResolver({})).check(
             assessment(),
             [rule(ScopeKind.IP, "8.8.8.8")],
             "http://8.8.8.8/",
             ScanTool.ZAP,
         )
     )
-    assert decision.allowed
+    assert not denied.allowed
+
+    settings = make_settings(
+        allow_public_targets=True, allowed_public_targets="8.8.8.8"
+    )
+    allowed = asyncio.run(
+        ScopeGuard(settings, FakeResolver({})).check(
+            assessment(),
+            [rule(ScopeKind.IP, "8.8.8.8")],
+            "http://8.8.8.8/",
+            ScanTool.ZAP,
+        )
+    )
+    assert allowed.allowed
+
+    hostname_settings = make_settings(
+        allow_public_targets=True,
+        allowed_public_targets="lsrs.example",
+    )
+    hostname_allowed = asyncio.run(
+        ScopeGuard(
+            hostname_settings,
+            FakeResolver({"lsrs.example": ["8.8.8.8"]}),
+        ).check(
+            assessment(),
+            [rule(ScopeKind.HOST, "lsrs.example")],
+            "https://lsrs.example/",
+            ScanTool.ZAP,
+        )
+    )
+    assert hostname_allowed.allowed
+
+    other_host = asyncio.run(
+        ScopeGuard(
+            hostname_settings,
+            FakeResolver({"other.example": ["8.8.8.8"]}),
+        ).check(
+            assessment(),
+            [rule(ScopeKind.HOST, "other.example")],
+            "https://other.example/",
+            ScanTool.ZAP,
+        )
+    )
+    assert not other_host.allowed

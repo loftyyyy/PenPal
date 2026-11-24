@@ -448,15 +448,20 @@ class ScopeGuard:
             raise TargetError(f"DNS resolution returned no addresses for {target.host}")
         return addresses
 
-    def _network_allowed(self, addresses: Sequence[str]) -> list[str]:
-        if self.settings.allow_public_targets:
-            return []
+    def _network_allowed(
+        self, addresses: Sequence[str], host: str | None = None
+    ) -> list[str]:
         networks = self.settings.allowed_networks
+        public_allowlist = set(self.settings.allowed_public_target_list)
+        host_allowed = bool(host and host.rstrip(".").lower() in public_allowlist)
         denied: list[str] = []
         for address in addresses:
             ip = ipaddress.ip_address(address)
-            if not any(ip in network for network in networks):
-                denied.append(address)
+            if any(ip in network for network in networks):
+                continue
+            if self.settings.allow_public_targets and host_allowed:
+                continue
+            denied.append(address)
         return denied
 
     async def check(
@@ -483,7 +488,7 @@ class ScopeGuard:
         except TargetError as exc:
             return _deny([str(exc)], target)
 
-        denied_ips = self._network_allowed(resolved)
+        denied_ips = self._network_allowed(resolved, target.host)
         if denied_ips:
             reasons.append(
                 "target resolves to addresses outside ALLOWED_TARGET_NETWORKS: "

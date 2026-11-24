@@ -48,7 +48,6 @@ OUTPUT_SCHEMAS: dict[AIFunction, type[BaseModel]] = {
     AIFunction.REMEDIATE: RemediateOutput,
     AIFunction.SUMMARY: SummaryOutput,
 }
-MAX_OUTPUT_TOKENS = 900
 EVIDENCE_ROWS = 5
 RAW_FIELD_MAX_CHARS = 2000
 
@@ -112,10 +111,14 @@ def build_provider(settings: Settings) -> AIProvider:
                     "ai_base_url": settings.ai_fallback_base_url,
                     "ai_api_key": settings.ai_fallback_api_key,
                     "ai_model": settings.ai_fallback_model,
+                    "ai_extra_body": settings.ai_fallback_extra_body,
+                    "ai_timeout_seconds": settings.ai_fallback_timeout_seconds,
                 }
             )
             return FailoverProvider(
-                primary, OpenAICompatProvider(fallback_settings)
+                primary,
+                OpenAICompatProvider(fallback_settings),
+                fallback_max_tokens=settings.ai_fallback_max_tokens,
             )
         return primary
     raise ProviderError(f"Unknown AI_PROVIDER: {settings.ai_provider}")
@@ -388,7 +391,7 @@ class AIAnalysisService:
             try:
                 async with self.limiter:
                     return await self.provider.complete_json(
-                        system, user, max_tokens=MAX_OUTPUT_TOKENS
+                        system, user, max_tokens=self.settings.ai_max_tokens
                     )
             except ProviderError as exc:
                 if not exc.transient or attempt == self.max_attempts - 1:

@@ -20,6 +20,7 @@ class FailoverProvider(AIProvider):
         failure_threshold: int = 3,
         cooldown_seconds: float = 60.0,
         clock: Callable[[], float] | None = None,
+        fallback_max_tokens: int | None = None,
     ) -> None:
         self.primary = primary
         self.fallback = fallback
@@ -29,6 +30,7 @@ class FailoverProvider(AIProvider):
         self._clock = clock or time.monotonic
         self._consecutive_failures = 0
         self._open_until = 0.0
+        self.fallback_max_tokens = fallback_max_tokens
 
     @property
     def circuit_open(self) -> bool:
@@ -91,8 +93,13 @@ class FailoverProvider(AIProvider):
 
         started = self._clock()
         try:
+            fallback_tokens = (
+                min(max_tokens, self.fallback_max_tokens)
+                if self.fallback_max_tokens
+                else max_tokens
+            )
             result = await self.fallback.complete_json(
-                system, user, max_tokens=max_tokens
+                system, user, max_tokens=fallback_tokens
             )
         except ProviderError as fallback_error:
             attempts.append(

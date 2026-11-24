@@ -89,17 +89,21 @@ class OpenAICompatProvider(AIProvider):
     def _body(
         self, system: str, user: str, max_tokens: int, *, json_mode: bool
     ) -> dict[str, Any]:
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": 0.2,
+            "temperature": float(self.settings.ai_temperature),
             "max_tokens": max_tokens,
         }
+        if self.settings.ai_top_p is not None:
+            body["top_p"] = float(self.settings.ai_top_p)
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        if self.settings.ai_extra_body:
+            body.update(self.settings.ai_extra_body)
         return body
 
     def _result(self, data: Any) -> ProviderResult:
@@ -117,6 +121,14 @@ class OpenAICompatProvider(AIProvider):
                 for part in content
                 if isinstance(part, dict) and isinstance(part.get("text"), str)
             )
+        # NVIDIA Nemotron exposes chain-of-thought separately. It is not the
+        # structured answer, but use it only if the provider omitted content.
+        if (not isinstance(content, str) or not content.strip()) and isinstance(
+            message, dict
+        ):
+            reasoning = message.get("reasoning_content")
+            if isinstance(reasoning, str) and reasoning.strip():
+                content = reasoning
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         return ProviderResult(
             content=content if isinstance(content, str) else "",

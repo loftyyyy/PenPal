@@ -76,6 +76,7 @@ class Settings(BaseSettings):
 
     allowed_target_networks: str = DEFAULT_ALLOWED_NETWORKS
     allow_public_targets: bool = False
+    allowed_public_targets: str = ""
 
     nmap_binary: str = "nmap"
     nmap_max_concurrency: int = 1
@@ -105,6 +106,13 @@ class Settings(BaseSettings):
     ai_fallback_base_url: str = ""
     ai_fallback_api_key: str = ""
     ai_fallback_model: str = ""
+    ai_max_tokens: int = 4096
+    ai_fallback_max_tokens: int = 1024
+    ai_fallback_timeout_seconds: int = 120
+    ai_temperature: float = 0.2
+    ai_top_p: float | None = None
+    ai_extra_body: dict[str, object] = {}
+    ai_fallback_extra_body: dict[str, object] = {}
     ai_max_rpm: int = 10
     ai_max_concurrency: int = 2
     ai_max_evidence_chars: int = 4000
@@ -140,6 +148,22 @@ class Settings(BaseSettings):
             raise ValueError("JWT_ALGORITHM is pinned to HS256")
         return "HS256"
 
+    @field_validator("ai_top_p", mode="before")
+    @classmethod
+    def _empty_optional_float(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator(
+        "ai_extra_body", "ai_fallback_extra_body", mode="before"
+    )
+    @classmethod
+    def _empty_optional_dict(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return {}
+        return value
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"
@@ -151,6 +175,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @property
+    def allowed_public_target_list(self) -> list[str]:
+        return [
+            item.strip().rstrip(".").lower()
+            for item in self.allowed_public_targets.split(",")
+            if item.strip()
+        ]
 
     @property
     def allowed_networks(self) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
@@ -207,10 +239,15 @@ class Settings(BaseSettings):
 
         if self.allow_public_targets:
             logger.warning(
-                "SECURITY WARNING: ALLOW_PUBLIC_TARGETS=true. The scope guard will allow "
-                "public IP addresses. Only use this on an isolated lab network with written "
-                "authorization. This is never acceptable for the PenPal course project."
+                "SECURITY WARNING: ALLOW_PUBLIC_TARGETS=true. Public IPs are allowed "
+                "only for exact hosts in ALLOWED_PUBLIC_TARGETS. Use only with written "
+                "authorization for the named target."
             )
+            if not self.allowed_public_target_list:
+                logger.warning(
+                    "ALLOW_PUBLIC_TARGETS=true but ALLOWED_PUBLIC_TARGETS is empty; "
+                    "all public targets remain blocked."
+                )
 
     def scan_timeout(self, tool: str, profile: str) -> int:
         key = f"scan_timeout_{tool}_{profile}_seconds"

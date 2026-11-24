@@ -31,6 +31,40 @@ From the backend it is `http://target:3000`. Add exactly that host/URL to the
 assessment scope. See the comment in `docker-compose.yml` before swapping the real
 LSRS copy.
 
+## ZAP API key
+
+There is no external ZAP key to obtain. You generate one and give the same value to the
+ZAP daemon and the backend:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Put it in `.env` as `ZAP_API_KEY=...`. Compose starts ZAP with
+`-config api.key=${ZAP_API_KEY}`. The backend never publishes ZAP's port and calls
+`http://zap:8090` inside the Compose network using the `X-ZAP-API-Key` header. If the key
+does not match, `/health/dependencies` reports ZAP unreachable and ZAP scans fail.
+
+## Deploying on the web
+
+The backend can run on a web-visible Docker host, but keep the security boundary:
+
+- Publish only the backend, behind HTTPS (reverse proxy or load balancer). Never publish
+  PostgreSQL or ZAP.
+- Set `ENV=production`, strong `SECRET_KEY`, `FIRST_ADMIN_PASSWORD`, `ZAP_API_KEY` and
+  `CREDENTIALS_KEY`; `/docs` is disabled in production.
+- Persist `DATA_DIR` (evidence, uploads, reports) and the PostgreSQL volume.
+- Give ZAP at least 2 GB; scanning tools run inside the backend/ZAP containers.
+- Configure `CORS_ORIGINS` to the real frontend origin.
+- The deployed LSRS host must be listed exactly in `ALLOWED_PUBLIC_TARGETS` with
+  `ALLOW_PUBLIC_TARGETS=true` and written authorization on file. Every other public
+  target stays blocked.
+- A public PenPal instance still requires login. Do not expose it without TLS, strong
+  credentials and a trusted network boundary.
+
+Local-only is the simplest demo setup; web deployment is possible with the same Compose
+stack and the hardening above.
+
 ## Local development
 
 Python 3.12 is used in the container; 3.11+ works for tests.
@@ -80,12 +114,16 @@ Copy `.env.example` to `.env`. The important variables:
 | `ZAP_MAX_MESSAGE_FETCHES`, `ZAP_MESSAGE_MAX_CHARS` | HTTP evidence sampling limits. |
 | `ZAP_ACTIVE_*` | Conservative active-scan limits. |
 | `ALLOWED_TARGET_NETWORKS` | IP allowlist; default loopback and private ranges. |
-| `ALLOW_PUBLIC_TARGETS` | Keep `false`; public targets are refused even if scoped. |
+| `ALLOW_PUBLIC_TARGETS` | `false` by default. Only for the exact authorized host in `ALLOWED_PUBLIC_TARGETS`. |
+| `ALLOWED_PUBLIC_TARGETS` | Exact comma-separated public hosts/IPs; empty means none. For the deployed LSRS: `lsrsv2.ethiodeploy.app`. |
 | `NMAP_MAX_CONCURRENCY` | Parallel Nmap jobs. |
 | `SCAN_TIMEOUT_*_SECONDS` | Per-tool/profile hard timeouts. |
 | `AI_PROVIDER` | `mock` or `openai_compat`. |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | OpenAI-compatible provider settings. |
 | `AI_MAX_RPM`, `AI_MAX_CONCURRENCY` | Provider rate limits. |
+| `AI_MAX_TOKENS`, `AI_FALLBACK_MAX_TOKENS` | Output budgets; NVIDIA Nemotron thinks before answering. |
+| `AI_EXTRA_BODY`, `AI_FALLBACK_EXTRA_BODY` | Extra JSON fields, e.g. Nemotron `enable_thinking`. |
+| `AI_FALLBACK_TIMEOUT_SECONDS` | Slower fallback budget, default 120. |
 | `AI_MAX_EVIDENCE_CHARS` | Evidence budget sent to the model. |
 | `MAX_UPLOAD_BYTES` | Manual evidence file cap (default 5 MB). |
 | `REPORT_EVIDENCE_MAX_CHARS` | Evidence excerpt cap in reports. |
@@ -113,16 +151,26 @@ findings only.
 `AI_PROVIDER=mock` is deterministic and needs no network; use it for tests and demos.
 For a real chain use `AI_PROVIDER=openai_compat` with a primary and an optional fallback:
 
-| Role | Variables | Example base URL |
+| Role | Variables | Verified example |
 |---|---|---|
-| Primary | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Google Gemini: `https://generativelanguage.googleapis.com/v1beta/openai` |
-| Fallback | `AI_FALLBACK_BASE_URL`, `AI_FALLBACK_API_KEY`, `AI_FALLBACK_MODEL` | OpenRouter: `https://openrouter.ai/api/v1` |
+| Primary | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | NVIDIA NIM: `https://integrate.api.nvidia.com/v1`, `nvidia/nemotron-3-ultra-550b-a55b` |
+| Fallback | `AI_FALLBACK_BASE_URL`, `AI_FALLBACK_API_KEY`, `AI_FALLBACK_MODEL` | NVIDIA NIM: `google/gemma-4-31b-it` |
 | Optional local | same variables, primary or fallback | Ollama: `http://ollama:11434/v1` |
+
+NVIDIA thinking models need extra request fields:
+```dotenv
+AI_EXTRA_BODY={"chat_template_kwargs":{"enable_thinking":true}}
+AI_MAX_TOKENS=4096
+AI_FALLBACK_MAX_TOKENS=1024
+AI_FALLBACK_TIMEOUT_SECONDS=120
+```
 
 The fallback is called only after a primary provider failure. Model names are environment
 variables and are never hard-coded. Free models may be rate-limited, change or disappear.
+Gemma is slower than Nemotron; the fallback has its own timeout and token budget.
 Results are cached by prompt hash + prompt version across providers; use `?force=true`
-to bypass the cache.
+to bypass the cache. `scripts/check_ai_models.py` probes both live models without printing
+keys.
 
 AI has three functions: `interpret`, `remediate`, and `summarize`. Findings receive only
 `ai_suggested_severity`; AI never sets final severity or verification state. Summaries are
@@ -247,7 +295,8 @@ non-zero on the first failure. It is not part of `pytest`.
 ## Security notes
 
 - Every scan re-checks authorization and scope at execution time. Out-of-scope rules
-  beat in-scope rules, DNS is resolved, and public IPs are denied by default.
+  beat in-scope rules, DNS is resolved, and public IPs are denied unless the exact host
+  is in `ALLOWED_PUBLIC_TARGETS` and `ALLOW_PUBLIC_TARGETS=true`.
 - ZAP gets the scope guard's include/exclude context, so spider and active scans cannot
   wander to other hosts via links or redirects.
 - Passwords use argon2; JWTs are short-lived and algorithm-pinned; login attempts are
@@ -278,8 +327,9 @@ non-zero on the first failure. It is not part of `pytest`.
   container; this development host has no Docker and no Nmap/dig/WhatWeb. WeasyPrint's
   system libraries may also be absent locally.
 - The exact LSRS address and final Gemini/OpenRouter model names remain environment
-  decisions. The public deployed LSRS URL is not enabled: public targets stay blocked
-  by §14 of `PROJECT_CONTEXT.md` until the team records explicit authorization there.
+  decisions. The authorized deployed LSRS host is allowed only when listed exactly in
+  `ALLOWED_PUBLIC_TARGETS` with `ALLOW_PUBLIC_TARGETS=true`; every other public target
+  stays blocked. Keep written authorization on file.
 
 ## Layout
 

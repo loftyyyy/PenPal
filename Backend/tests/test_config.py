@@ -82,8 +82,11 @@ def test_complete_fallback_ai_settings_are_accepted() -> None:
 
 
 def test_public_target_warning_is_loud(caplog: pytest.LogCaptureFixture) -> None:
-    settings = _settings(allow_public_targets=True)
+    settings = _settings(
+        allow_public_targets=True,
+        allowed_public_targets="lsrsv2.ethiodeploy.app",
+    )
     with caplog.at_level(logging.WARNING):
         settings.validate_for_startup()
     assert "ALLOW_PUBLIC_TARGETS=true" in caplog.text
-    assert "never acceptable" in caplog.text
+    assert "exact hosts in ALLOWED_PUBLIC_TARGETS" in caplog.text

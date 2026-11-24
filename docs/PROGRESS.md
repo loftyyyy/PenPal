@@ -2,6 +2,15 @@
 
 Newest entry first. Each phase ends with tests, a running app check, and a commit.
 
+## 2026-11-25 — NVIDIA model chain and authorized public target
+
+- OpenAI-compatible provider supports per-provider temperature, `top_p`, max tokens, extra request body and reasoning-content fallback.
+- Primary candidate `nvidia/nemotron-3-ultra-550b-a55b` with `chat_template_kwargs.enable_thinking=true`; fallback `google/gemma-4-31b-it` with its own token budget (1024) and timeout (120s).
+- Live probe: primary OK ~2–7s; fallback OK ~9–50s depending on load. Gemma at 4096/60s timed out, so fallback is capped at 1024 tokens and 120s.
+- Added `scripts/check_ai_models.py` (live only, never prints keys), `AI_*` request controls, and unit tests for extra body, reasoning content and fallback token budget.
+- Public targets now require both `ALLOW_PUBLIC_TARGETS=true` and an exact host in `ALLOWED_PUBLIC_TARGETS`; the team-authorized deployed LSRS host is prefilled as a commented/default allowlist value, but the switch stays false by default.
+- `PROJECT_CONTEXT.md` §14 records the narrow authorized-LSRS exception. All other public targets remain blocked.
+
 ## 2026-11-24 — Follow-up Phase 13: smoke test and handover
 
 - `scripts/smoke_e2e.py` runs the full flow against a live stack (login, assessment, scope, authorization, Nmap, dig, whois skip, WhatWeb, ZAP, HTTP config checks, AI analysis, L×I verification, summary generation/approval, dashboard, PDF download, audit). It exits non-zero on failure and is excluded from pytest.

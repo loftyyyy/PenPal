@@ -65,5 +65,8 @@ One line per non-obvious decision: what was chosen and why.
 - HTTP checks use httpx, not shell curl. Every request and manual redirect re-enters the scope guard and is audited; request/rate/login budgets are enforced in code.
 - The summary workflow stores drafts, edits and approvals. Only an approved summary is used in the report body; unapproved drafts and pending/needs-retest AI suggestions are labelled UNVERIFIED appendices. Zero confirmed findings use a deterministic summary and never call the AI.
 - AI results are cached provider-agnostically by sanitized prompt + prompt version. Failover attempts and the circuit state are recorded; `force=true` regenerates.
-- The public deployed LSRS URL is not enabled. Public targets remain rejected under `PROJECT_CONTEXT.md` §14 until the team records explicit authorization and changes that rule; use a Compose/LSRS private address or the placeholder.
+- Public targets remain closed by default. The team authorized the deployed LSRS host, so it may be enabled only by exact hostname in `ALLOWED_PUBLIC_TARGETS` with `ALLOW_PUBLIC_TARGETS=true`; all other public targets stay blocked. This narrow exception is recorded in `PROJECT_CONTEXT.md` §14.
 - `smoke_e2e.py` is a live-stack acceptance script, not pytest; real tools/PDF/provider calls are verified there on a Docker host.
+- NVIDIA NIM is the chosen hosted AI route: Nemotron 3 Ultra primary with thinking enabled and Gemma 4 31B fallback. Gemini is no longer the default because live testing showed it unreliable.
+- Per-provider request controls are explicit: primary 4096 tokens, fallback 1024 tokens and 120s timeout. Gemma timed out at 4096/60s; this keep the fallback useful.
+- Public-target access is a narrow hostname allowlist: both `ALLOW_PUBLIC_TARGETS=true` and the exact host in `ALLOWED_PUBLIC_TARGETS` are required. This implements the team-authorized LSRS exception without opening arbitrary public scanning.

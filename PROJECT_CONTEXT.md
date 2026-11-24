@@ -244,7 +244,7 @@ Tool severity, AI-suggested severity, and assessor (final) severity are **separa
 ## 14. Ethical and safety rules (engineering constraints, not suggestions)
 
 1. Test only applications authorized by the instructor or system owner.
-2. Never scan public websites, university networks, or unauthorized systems. The backend **rejects** non-allowed targets even if someone enters them as "in scope".
+2. Never scan public websites, university networks, or unauthorized systems. The backend **rejects** non-allowed targets even if someone enters them as "in scope". Exception (team decision, v0.3): the authorized deployed LSRS host may be tested only when its exact hostname is listed in `ALLOWED_PUBLIC_TARGETS`, `ALLOW_PUBLIC_TARGETS=true`, and written authorization is on file. All other public targets remain blocked.
 3. Use test accounts and synthetic data only.
 4. No destructive attacks, no DoS, nothing that may disrupt services. Scan profiles are fixed, low-intensity, and rate-limited. Login testing stays within a small number of attempts.
 5. Never expose credentials or confidential information to AI services (§11).
@@ -302,7 +302,7 @@ Tool severity, AI-suggested severity, and assessor (final) severity are **separa
 - [ ] **Final Gemini and OpenRouter model names:** set via environment variables; free models may change or disappear.
 - [ ] **Authorization record:** confirm the instructor's acknowledgment is on file with the authorization letter.
 - [ ] **Demo hosting:** local machine or Linux VM.
-- [ ] **Deployed LSRS URL:** the public deployment mentioned by the team is not enabled by default. Scanning public hosts conflicts with §14; it remains blocked until the team records explicit authorization and changes the ethical rules in this file.
+- [x] **Deployed LSRS URL:** team states the deployed LSRS is authorized. Use the exact host in `ALLOWED_PUBLIC_TARGETS` with `ALLOW_PUBLIC_TARGETS=true`; keep written authorization on file. Every other public target stays blocked.
 
 ---
 
