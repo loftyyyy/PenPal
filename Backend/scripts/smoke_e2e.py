@@ -11,11 +11,17 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.config import get_settings
 
 
 class SmokeFailure(RuntimeError):
@@ -52,8 +58,9 @@ class Smoke:
         return result
 
     def login(self) -> None:
-        email = os.environ.get("FIRST_ADMIN_EMAIL", "admin@penpal.local")
-        password = os.environ.get("FIRST_ADMIN_PASSWORD")
+        settings = get_settings()
+        email = os.environ.get("FIRST_ADMIN_EMAIL") or settings.first_admin_email
+        password = os.environ.get("FIRST_ADMIN_PASSWORD") or settings.first_admin_password
         if not password:
             raise SmokeFailure("FIRST_ADMIN_PASSWORD is required")
         response = self.client.post(
