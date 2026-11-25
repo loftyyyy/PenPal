@@ -18,8 +18,9 @@ frontend integration contract.
 
 ```bash
 cp .env.example .env
-# edit .env: set SECRET_KEY, FIRST_ADMIN_PASSWORD and ZAP_API_KEY
-docker compose --profile dev-target up --build
+# edit .env: set SECRET_KEY, FIRST_ADMIN_PASSWORD, ZAP_API_KEY, CREDENTIALS_KEY
+# and the AI provider values. See "Configuration".
+docker compose --profile dev-target up --build -d
 ```
 
 - API health: http://localhost:8000/api/v1/health
@@ -31,6 +32,108 @@ The `dev-target` profile starts OWASP Juice Shop as a stand-in for the LSRS test
 From the backend it is `http://target:3000`. Add exactly that host/URL to the
 assessment scope. See the comment in `docker-compose.yml` before swapping the real
 LSRS copy.
+
+## Running the backend, step by step
+
+Prerequisites: Docker Desktop or Docker Engine with Compose, at least 4 GB free RAM
+(ZAP uses 2 GB), and the repo `.env` filled in.
+
+1. Open a terminal at the repo root:
+
+```bash
+cd C:\Users\User\Documents\ClonedProjects\PenPal
+```
+
+2. Start the stack with the local demo target:
+
+```bash
+docker compose --profile dev-target up --build -d
+```
+
+For the real LSRS target instead, omit the profile:
+
+```bash
+docker compose up --build -d
+```
+
+3. Confirm containers are healthy:
+
+```bash
+docker compose ps
+```
+
+Expected: `backend`, `db`, `zap`; plus `target` when the dev profile is used.
+PostgreSQL and ZAP must not be published to the host.
+
+4. Check API health and dependencies:
+
+```bash
+curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/api/v1/health/dependencies
+```
+
+Every dependency should be `ok`: database, Nmap, dig, whois, WhatWeb, curl, AI provider,
+ZAP. If a tool or ZAP is `bad`, scans will fail.
+
+5. Optional demo data:
+
+```bash
+docker compose exec backend python scripts/seed.py --demo
+```
+
+The first admin is bootstrapped from `.env` on every backend start. Existing admin
+passwords are not overwritten.
+
+6. Open the API:
+
+```text
+API:      http://localhost:8000/api/v1
+Swagger:  http://localhost:8000/docs          (development only)
+OpenAPI:  http://localhost:8000/openapi.json  (development only)
+```
+
+7. Run the live smoke test from the host:
+
+```bash
+cd Backend
+python scripts/smoke_e2e.py --target http://target:3000
+```
+
+Real LSRS:
+
+```bash
+python scripts/smoke_e2e.py --target https://lsrsv2.ethiodeploy.app
+```
+
+8. Stop the stack:
+
+```bash
+docker compose --profile dev-target down
+```
+
+### Daily commands
+
+```bash
+# Start existing stack
+docker compose --profile dev-target up -d
+
+# Recreate backend and ZAP after .env changes
+docker compose up -d --force-recreate backend zap
+
+# Logs
+docker compose logs -f backend
+docker compose logs -f zap
+
+# Manual migrations
+docker compose exec backend alembic upgrade head
+
+# Rebuild after code changes
+docker compose --profile dev-target up --build -d
+```
+
+The backend container runs `alembic upgrade head` and the first-admin bootstrap on
+start. Uploaded evidence and reports live in the `penpal_data` volume; PostgreSQL lives
+in `penpal_db`.
 
 ## ZAP API key
 
