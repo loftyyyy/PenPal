@@ -23,6 +23,19 @@ async def test_security_headers_present(client: AsyncClient) -> None:
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
+async def test_cors_preflight_allows_put(client: AsyncClient) -> None:
+    response = await client.options(
+        "/api/v1/assessments/1/http-check-config",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert "PUT" in response.headers["access-control-allow-methods"]
+
+
 async def test_unknown_route_uses_error_envelope(client: AsyncClient) -> None:
     response = await client.get("/api/v1/nope")
     assert response.status_code == 404

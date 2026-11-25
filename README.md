@@ -10,8 +10,9 @@ what the product must never do.
 
 ## Status
 
-Backend complete for the course phases. See `docs/PROGRESS.md` for what was built and
-`docs/DECISIONS.md` for non-obvious choices.
+Backend complete for the course phases. See `docs/PROGRESS.md` for what was built,
+`docs/DECISIONS.md` for non-obvious choices, and `BACKEND_CONTEXT.md` for the complete
+frontend integration contract.
 
 ## Quick start
 
