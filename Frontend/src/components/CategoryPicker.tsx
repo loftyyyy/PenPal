@@ -1,14 +1,17 @@
 import { FINDING_CATEGORIES, type FindingCategory } from "../lib/types";
 import { labelize } from "../lib/format";
+import { InfoTip } from "./InfoTip";
 
 export function CategoryPicker({
   value,
   onChange,
   idPrefix = "category",
+  help = "Choose the security areas this assessment covers. These guide test planning and reporting; you can change them later.",
 }: {
   value: FindingCategory[];
   onChange: (value: FindingCategory[]) => void;
   idPrefix?: string;
+  help?: string;
 }) {
   function toggle(category: FindingCategory) {
     onChange(
@@ -20,7 +23,10 @@ export function CategoryPicker({
 
   return (
     <fieldset className="chip-fieldset">
-      <legend>Assessment categories</legend>
+      <legend>
+        Assessment categories
+        <InfoTip label="Assessment categories">{help}</InfoTip>
+      </legend>
       <div className="chip-grid">
         {FINDING_CATEGORIES.map((category) => {
           const id = `${idPrefix}-${category}`;

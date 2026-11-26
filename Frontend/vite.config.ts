@@ -9,7 +9,9 @@ export default defineConfig({
     proxy: { "/api": "http://127.0.0.1:8000" },
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    restoreMocks: true,
   },
 });

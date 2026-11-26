@@ -9,6 +9,7 @@ import {
 import type { Severity, VerificationStatus } from "../lib/types";
 import { labelize } from "../lib/format";
 import { formatApiError } from "../lib/api";
+import { InfoTip } from "./InfoTip";
 
 export function PageHeader({
   title,
@@ -48,11 +49,13 @@ export function Button({
 
 export function Card({
   title,
+  help,
   actions,
   children,
   className = "",
 }: {
   title?: ReactNode;
+  help?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -61,7 +64,18 @@ export function Card({
     <section className={`card ${className}`.trim()}>
       {title || actions ? (
         <div className="card-header">
-          {title ? <h2>{title}</h2> : <span />}
+          {title ? (
+            <div className="card-title-row">
+              <h2>{title}</h2>
+              {help ? (
+                <InfoTip label={typeof title === "string" ? title : "section"}>
+                  {help}
+                </InfoTip>
+              ) : null}
+            </div>
+          ) : (
+            <span />
+          )}
           {actions ? <div className="card-actions">{actions}</div> : null}
         </div>
       ) : null}
@@ -72,12 +86,14 @@ export function Card({
 
 export function Field({
   label,
+  help,
   hint,
   error,
   children,
   className = "",
 }: {
   label: string;
+  help?: ReactNode;
   hint?: ReactNode;
   error?: string | null;
   children: ReactNode;
@@ -98,9 +114,12 @@ export function Field({
 
   return (
     <div className={`field ${className}`.trim()}>
-      <label className="field-label" htmlFor={childId}>
-        {label}
-      </label>
+      <span className="field-label-row">
+        <label className="field-label" htmlFor={childId}>
+          {label}
+        </label>
+        {help ? <InfoTip label={label}>{help}</InfoTip> : null}
+      </span>
       {control}
       {hint ? <span className="field-hint">{hint}</span> : null}
       {error ? (
