@@ -561,6 +561,12 @@ interface HttpCheckConfigOut extends HttpCheckConfigIn {
   updated_at: ISODate;
 }
 
+interface TestAccountCreate {
+  role: string;
+  username: string;
+  password: string; // write-only
+}
+
 interface TestAccountOut {
   id: number;
   assessment_id: number;
@@ -612,6 +618,14 @@ interface AIStatusOut {
 interface SummaryBundle {
   latest: SummaryOut | null;
   history: SummaryOut[];
+}
+
+interface SummaryEdit {
+  text: string; // 1..6000
+}
+
+interface ReportCreate {
+  format: ReportFormat;
 }
 ```
 
@@ -1184,7 +1198,8 @@ Summary workflow:
 1. `POST /summary/generate` creates a `draft`.
 2. `PATCH /summaries/{id}` edits the text. Editing an approved summary resets it to draft.
 3. `POST /summaries/{id}/approve` approves it and supersedes the previous approved summary.
-4. Report uses approved summary only. Unapproved drafts go to the AI appendix.
+4. Report uses the approved summary for AI prose. If none is approved, the report uses a
+   deterministic server summary. Unapproved drafts go to the AI appendix.
 
 Summary edit:
 
@@ -1348,8 +1363,11 @@ python scripts/export_openapi.py
 ```
 
 - Migration head: `b1c2d3e4f5a6`.
-- Verification run: 260 pytest tests, ruff clean. Host lacks Nmap/ZAP/WhatWeb/PDF system
-  libs; real tool runs and PDF must be checked in Docker via `scripts/smoke_e2e.py`.
+- Verification run: 260 pytest tests, ruff clean.
+- Docker smoke test passed on 2026-11-25: Nmap, dig, whois skip, WhatWeb, ZAP baseline,
+  HTTP config checks, bulk AI, L/I verification, summary approval, dashboard, PDF
+  report/download and audit trail. The Windows host itself lacks the tool binaries and
+  PDF system libs; use the Compose stack and `scripts/smoke_e2e.py` for real-tool checks.
 
 ---
 
