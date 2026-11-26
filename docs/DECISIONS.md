@@ -70,3 +70,8 @@ One line per non-obvious decision: what was chosen and why.
 - NVIDIA NIM is the chosen hosted AI route: Nemotron 3 Ultra primary with thinking enabled and Gemma 4 31B fallback. Gemini is no longer the default because live testing showed it unreliable.
 - Per-provider request controls are explicit: primary 4096 tokens, fallback 1024 tokens and 120s timeout. Gemma timed out at 4096/60s; this keep the fallback useful.
 - Public-target access is a narrow hostname allowlist: both `ALLOW_PUBLIC_TARGETS=true` and the exact host in `ALLOWED_PUBLIC_TARGETS` are required. This implements the team-authorized LSRS exception without opening arbitrary public scanning.
+
+- Authorization files are scoped by the assessment creator (admins may manage all), not by every authenticated assessor, because this endpoint proves target ownership.
+- The verification path is configured per token but restricted to an absolute path without query, fragment, whitespace, backslash or dot segments. Redirects are not followed and response bodies are capped while streaming.
+- Only one authorization file is active per assessment/target; rotation revokes the prior active record instead of deleting history.
+- Tool-driven text and JSON are sanitized for NUL before persistence because PostgreSQL text and JSONB cannot store NUL even when JSON encodes it as `\u0000`. This is applied at the normalizer boundary so every source is covered.

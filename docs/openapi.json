@@ -867,6 +867,161 @@
         "title": "AuditOutcome",
         "type": "string"
       },
+      "AuthorizationFileCreate": {
+        "properties": {
+          "expires_in_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Expires In Hours",
+            "type": "integer"
+          },
+          "verification_path": {
+            "default": "/.well-known/penpal-verification.txt",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Verification Path",
+            "type": "string"
+          }
+        },
+        "title": "AuthorizationFileCreate",
+        "type": "object"
+      },
+      "AuthorizationFileOut": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "verified",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verification_path": {
+            "title": "Verification Path",
+            "type": "string"
+          },
+          "verification_url": {
+            "title": "Verification Url",
+            "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "id",
+          "assessment_id",
+          "created_by",
+          "target",
+          "token",
+          "content",
+          "verification_path",
+          "verification_url",
+          "status",
+          "expires_at",
+          "revoked_at",
+          "verified_at",
+          "last_checked_at",
+          "failure_reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AuthorizationFileOut",
+        "type": "object"
+      },
       "Body_add_evidence_api_v1_findings__finding_id__evidence_post": {
         "properties": {
           "file": {
@@ -5144,6 +5299,113 @@
         ]
       }
     },
+    "/api/v1/assessments/{assessment_id}/authorization-files": {
+      "get": {
+        "operationId": "list_authorization_files_api_v1_assessments__assessment_id__authorization_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuthorizationFileOut"
+                  },
+                  "title": "Response List Authorization Files Api V1 Assessments  Assessment Id  Authorization Files Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List authorization files for an assessment",
+        "tags": [
+          "Authorization files"
+        ]
+      },
+      "post": {
+        "description": "The assessment creator (or an admin) gets a unique token to publish at the configured path on the assessment target. Creating a new token revokes the previous active token for the same target.",
+        "operationId": "create_authorization_file_api_v1_assessments__assessment_id__authorization_files_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationFileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a target-ownership verification token",
+        "tags": [
+          "Authorization files"
+        ]
+      }
+    },
     "/api/v1/assessments/{assessment_id}/confirm-authorization": {
       "post": {
         "description": "Sets the confirmation flag, user and timestamp. Required before any scan. The authorization reference must already be recorded.",
@@ -6518,6 +6780,196 @@
         ]
       }
     },
+    "/api/v1/authorization-files/{file_id}": {
+      "get": {
+        "operationId": "get_authorization_file_api_v1_authorization_files__file_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Inspect an authorization file",
+        "tags": [
+          "Authorization files"
+        ]
+      }
+    },
+    "/api/v1/authorization-files/{file_id}/file": {
+      "get": {
+        "description": "Returns the exact text to publish at the verification path.",
+        "operationId": "download_authorization_file_api_v1_authorization_files__file_id__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download the verification token file",
+        "tags": [
+          "Authorization files"
+        ]
+      }
+    },
+    "/api/v1/authorization-files/{file_id}/revoke": {
+      "post": {
+        "operationId": "revoke_authorization_file_api_v1_authorization_files__file_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke an authorization file",
+        "tags": [
+          "Authorization files"
+        ]
+      }
+    },
+    "/api/v1/authorization-files/{file_id}/verify": {
+      "post": {
+        "description": "Fetches the configured path from the assessment target and compares it with the token. Redirects are not followed and only the first 4 KiB are read.",
+        "operationId": "verify_authorization_file_api_v1_authorization_files__file_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Verify the token at the target's well-known path",
+        "tags": [
+          "Authorization files"
+        ]
+      }
+    },
     "/api/v1/evidence/{evidence_id}/download": {
       "get": {
         "operationId": "download_evidence_api_v1_evidence__evidence_id__download_get",
@@ -7491,6 +7943,10 @@
     {
       "description": "Assessment registration and authorization",
       "name": "Assessments"
+    },
+    {
+      "description": "Target-ownership verification tokens",
+      "name": "Authorization files"
     },
     {
       "description": "In-scope and out-of-scope rules; dry-run checks",

@@ -3,6 +3,7 @@
 from app.db.models.ai_analysis import AIAnalysis
 from app.db.models.assessment import Assessment, ScopeItem
 from app.db.models.audit import AuditLog
+from app.db.models.authorization_file import AuthorizationFile
 from app.db.models.evidence import Evidence
 from app.db.models.finding import Finding
 from app.db.models.http_checks import HttpCheckConfig, TestAccount
@@ -16,6 +17,7 @@ __all__ = [
     "Assessment",
     "AssessmentSummary",
     "AuditLog",
+    "AuthorizationFile",
     "Evidence",
     "Finding",
     "HttpCheckConfig",

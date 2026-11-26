@@ -804,6 +804,32 @@ interface AssessmentUpdate {
 interface ConfirmAuthorizationRequest {
   note?: string | null; // max 2000
 }
+
+type AuthorizationFileStatus = "pending" | "verified" | "expired" | "revoked";
+
+interface AuthorizationFileCreate {
+  expires_in_hours?: number; // 1..720, default 24
+  verification_path?: string; // default /.well-known/penpal-verification.txt
+}
+
+interface AuthorizationFileOut {
+  id: number;
+  assessment_id: number;
+  created_by: number | null;
+  target: string; // origin derived from assessment.target_base_url
+  token: string;
+  content: string; // token text to publish at verification_path
+  verification_path: string;
+  verification_url: string; // target + path
+  status: AuthorizationFileStatus;
+  expires_at: ISODate;
+  revoked_at: ISODate | null;
+  verified_at: ISODate | null;
+  last_checked_at: ISODate | null;
+  failure_reason: string | null;
+  created_at: ISODate;
+  updated_at: ISODate;
+}
 ```
 
 Create example:
@@ -822,6 +848,36 @@ Create example:
 
 New assessment starts `draft`; scans are refused until authorization is confirmed.
 Archive blocks further scans and scope edits.
+
+### 6.5.1 Authorization files
+
+Target-ownership verification for an assessment target. Management is limited to the
+assessment creator or an admin.
+
+| Method | Path | Auth | Body | Response |
+|---|---|---|---|---|
+| POST | `/assessments/{assessment_id}/authorization-files` | owner/admin | `AuthorizationFileCreate` | `201 AuthorizationFileOut` |
+| GET | `/assessments/{assessment_id}/authorization-files` | owner/admin | — | `AuthorizationFileOut[]` |
+| GET | `/authorization-files/{file_id}` | owner/admin | — | `AuthorizationFileOut` |
+| GET | `/authorization-files/{file_id}/file` | owner/admin | — | text file attachment |
+| POST | `/authorization-files/{file_id}/verify` | owner/admin | — | `AuthorizationFileOut` |
+| POST | `/authorization-files/{file_id}/revoke` | owner/admin | — | `AuthorizationFileOut` |
+
+- `target` is the origin of `assessment.target_base_url`; the assessment must have one.
+- The token is unique and single-use per active record. Creating a new token revokes the
+  previous active token for the same assessment/target.
+- Publish `content` exactly at `verification_path` on the target. Verification fetches
+  `verification_url`, does not follow redirects, reads at most 4 KiB, and requires
+  HTTP 200 with a body equal to the token.
+- Expired and revoked records return `409`; a remote missing file or mismatch returns
+  `422`. Records are never deleted, so history and revocation remain inspectable.
+
+```json
+{
+  "expires_in_hours": 24,
+  "verification_path": "/.well-known/penpal-verification.txt"
+}
+```
 
 ### 6.6 Scope
 
@@ -1300,6 +1356,10 @@ Poll/list reports only if you need history. Download only when `has_file=true`.
 | Report not ready | 409 | `report_not_ready` |
 | Raw output unavailable | 409 | `raw_output_unavailable` |
 | No confirmed findings for summary | 409 | `no_confirmed_findings` |
+| Authorization file expired/revoked | 409 | `authorization_file_expired` / `authorization_file_revoked` |
+| Authorization token missing/mismatched | 422 | `authorization_file_unavailable` / `authorization_file_mismatch` |
+| Authorization verification unreachable | 422 | `authorization_file_unreachable` |
+| Assessment target missing for authorization file | 422 | `authorization_target_required` |
 | AI summary generation failed | 502 | `summary_generation_failed` |
 | Report generation failed | 500 | `report_generation_failed` |
 | Validation failure | 422 | `validation_error` |
@@ -1310,7 +1370,10 @@ Event names in audit log include `auth.login_success`, `auth.login_failed`,
 `scan.cancelled`, `finding.created`, `finding.verified`, `evidence.added`,
 `ai.analyzed`, `ai.bulk_requested`, `summary.generated`, `summary.edited`,
 `summary.approved`, `http_check.request`, `http_checks.config_updated`,
-`test_account.created`, `test_account.deleted`, `report.generated`.
+`test_account.created`, `test_account.deleted`,
+`authorization_file.created`, `authorization_file.verified`,
+`authorization_file.verification_failed`, `authorization_file.revoked`,
+`report.generated`.
 
 ---
 
@@ -1354,7 +1417,7 @@ scope. Frontend must still call `/scope/check` or rely on scan errors.
 
 ## 10. Generated artifacts
 
-- `docs/openapi.json` — complete OpenAPI 3 schema, 40 paths / 50 operations.
+- `docs/openapi.json` - complete OpenAPI 3 schema, 45 paths / 56 operations.
 - Regenerate:
 
 ```bash
@@ -1362,8 +1425,8 @@ cd Backend
 python scripts/export_openapi.py
 ```
 
-- Migration head: `b1c2d3e4f5a6`.
-- Verification run: 260 pytest tests, ruff clean.
+- Migration head: `f4a5b6c7d8e9`.
+- Verification run: 271 pytest tests, ruff clean.
 - Docker smoke test passed on 2026-11-25: Nmap, dig, whois skip, WhatWeb, ZAP baseline,
   HTTP config checks, bulk AI, L/I verification, summary approval, dashboard, PDF
   report/download and audit trail. The Windows host itself lacks the tool binaries and

@@ -163,3 +163,13 @@ Next: assessments, scope items and the scope guard.
 - Alembic initialised; pytest + ruff configured.
 
 Next: auth and users.
+
+## 2026-11-27 - Target authorization files and ZAP ingestion repair
+
+- Target ownership tokens are stored in `authorization_files` with a unique random token, expiry (1-720 hours), revocation timestamp, verification timestamp and failure text.
+- Management is limited to the assessment creator or an admin. Creating a new token revokes the previous active token for the same assessment/target.
+- Verification fetches the assessment target's configured well-known path over http(s), follows no redirects, reads at most 4 KiB and compares the body exactly to the token.
+- Root cause of missing `active_limited` findings: ZAP message bodies can contain binary data with NUL escapes. `json.loads` produced NUL characters, PostgreSQL JSONB rejected the insert (`0x00`), and the whole finding transaction rolled back after the scan had been marked completed.
+- The normalizer now removes NUL characters from every persisted text and JSON value, including raw alerts and HTTP evidence, before the database write.
+- Tests cover authorization ownership, expiry, revocation, mismatch, remote failure and token rotation. ZAP tests cover `active_limited` alerts with empty attack/evidence/param, CWE `-1`, Medium/Low/Informational risks, NUL response bodies, and dashboard/finding visibility.
+- Live Docker verification: fresh ZAP `active_limited` scan completed with 233 findings; dashboard reported all 237 findings (233 ZAP + 4 HTTP checks).
