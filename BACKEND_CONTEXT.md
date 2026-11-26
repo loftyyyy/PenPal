@@ -381,6 +381,11 @@ interface EvidenceOut {
   created_at: ISODate;
 }
 
+interface FindingAnalysisOut {
+  finding_id: number;
+  analyses: AIAnalysisOut[]; // interpret first, then remediate
+}
+
 interface AIAnalysisOut {
   id: number;
   finding_id: number | null;
@@ -1089,7 +1094,7 @@ HTTP checks run only through the scan endpoint with `tool=http_checks`.
 
 | Method | Path | Auth | Query/body | Response |
 |---|---|---|---|---|
-| POST | `/findings/{finding_id}/analyze` | bearer | `force?` | `FindingAnalysisOut` |
+| POST | `/findings/{finding_id}/analyze` | bearer | `force?` | `200 FindingAnalysisOut {finding_id, analyses[]}` |
 | POST | `/assessments/{assessment_id}/analyze` | bearer | `BulkAnalyzeRequest` | `202 BulkAnalyzeQueued` |
 | GET | `/assessments/{assessment_id}/ai-status` | bearer | — | `AIStatusOut` |
 | GET | `/findings/{finding_id}/ai-analyses` | bearer | — | `AIAnalysisOut[]` |
@@ -1098,8 +1103,66 @@ HTTP checks run only through the scan endpoint with `tool=http_checks`.
 | PATCH | `/summaries/{summary_id}` | bearer | `SummaryEdit` | `SummaryOut` |
 | POST | `/summaries/{summary_id}/approve` | bearer | — | `SummaryOut` |
 
-Single analyze runs `interpret` + `remediate` and returns both rows. AI failure is stored
-per function; HTTP request still succeeds.
+`POST /findings/{id}/analyze` returns `200` with `FindingAnalysisOut`, not a bare array:
+
+```json
+{
+  "finding_id": 12,
+  "analyses": [
+    {
+      "id": 91,
+      "finding_id": 12,
+      "assessment_id": 3,
+      "function": "interpret",
+      "provider": "openai_compat",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "prompt_version": "2026-11-24.1",
+      "input_hash": "<sha256>",
+      "sanitized_input": "FUNCTION: interpret ...",
+      "output": { "suggested_severity": "high" },
+      "status": "success",
+      "error": null,
+      "latency_ms": 1823,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "redaction_report": { "cookie_header": 1 },
+      "attempts": [
+        {
+          "provider": "openai_compat",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "outcome": "success",
+          "latency_ms": 1823,
+          "error_class": null
+        }
+      ],
+      "created_at": "2026-11-25T12:34:56Z"
+    },
+    {
+      "id": 92,
+      "finding_id": 12,
+      "assessment_id": 3,
+      "function": "remediate",
+      "provider": "openai_compat",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "prompt_version": "2026-11-24.1",
+      "input_hash": "<sha256>",
+      "sanitized_input": "FUNCTION: remediate ...",
+      "output": { "summary": "Use parameterised queries." },
+      "status": "success",
+      "error": null,
+      "latency_ms": 1650,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "redaction_report": { "cookie_header": 1 },
+      "attempts": [],
+      "created_at": "2026-11-25T12:34:58Z"
+    }
+  ]
+}
+```
+
+Both functions are always attempted. If one fails, its row has `status: "failed"` or
+`"invalid_output"`, `output: null` and an `error`; the HTTP request still returns `200`.
 
 Bulk request:
 
