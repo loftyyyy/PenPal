@@ -20,7 +20,7 @@ export function AdminRoute() {
   const { isAdmin } = useAuth()
   if (!isAdmin) {
     return (
-      <div className="mx-auto mt-16 max-w-md rounded-lg border border-line bg-surface p-8 text-center">
+      <div className="ui-page ui-panel mx-auto mt-16 max-w-md text-center">
         <ShieldOff className="mx-auto mb-3 h-8 w-8 text-muted" aria-hidden="true" />
         <h2 className="text-lg font-semibold">Admin access required</h2>
         <p className="mt-2 text-sm text-muted">

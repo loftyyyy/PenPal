@@ -1,0 +1,27 @@
+{
+  "planHash": "b62c5560f827b447553069b53f29bcadb68cedecb63373d05137d3e1f2af0e53",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-26T17:53:21.3559747Z",
+  "retryCount": 1,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": false,
+    "setupDurationMs": 60123,
+    "setupFailureOutput": "setup step 0 \u0027npm\u0027 failed (exit=, timedOut=True)\r\n",
+    "assertions": [],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\nvm4w\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "C:\\Users\\Charisse\\PenPal\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

@@ -2,6 +2,16 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
+## PenPal design system
+
+Shared design tokens and component styles live in `src/index.css`. Keep new and updated screens on this system instead of introducing page-specific colors, type sizes, control dimensions, or radii.
+
+- Wrap authenticated page content in `.ui-page`; use `.ui-login` for the login screen.
+- Use the `--color-*`, `--text-*`, `--spacing-*`, and `--radius-*` CSS variables for custom styling.
+- Use `.ui-panel`, `.ui-table-container` with `.ui-table`, and `.ui-badge` with a status variant for shared surfaces, tables, and status indicators.
+- Buttons use the shared button rules; set `data-variant` to `primary`, `outline`, `danger`, or `ghost` when a non-default variant is needed. Use `.ui-button` for buttons outside `.ui-page` and for button-styled links.
+- Inputs, selects, textareas, headings, and labels inside `.ui-page` use the shared form and typography rules automatically.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)

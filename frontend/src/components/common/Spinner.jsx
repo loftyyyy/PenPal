@@ -2,9 +2,9 @@ import { Loader2 } from 'lucide-react'
 
 export default function Spinner({ label = 'Loading', className = '' }) {
   return (
-    <div role="status" className={`flex items-center justify-center gap-2 text-muted ${className}`}>
-      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-      <span className="text-sm">{label}</span>
+    <div role="status" className={`ui-spinner ${className}`}>
+      <Loader2 className="animate-spin" aria-hidden="true" />
+      <span>{label}</span>
     </div>
   )
 }

@@ -1,32 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import TopBar from './TopBar'
-
-const COLLAPSE_KEY = 'penpal_sidebar_collapsed' // UI preference only, nothing sensitive
 
 export default function AppLayout() {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1')
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  useEffect(() => {
-    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0') } catch { /* ignore */ }
-  }, [collapsed])
-
   return (
-    <div className="flex h-full bg-canvas">
+    <div className="flex h-full" style={{ background: 'var(--color-background)' }}>
       <Sidebar
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((v) => !v)}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar onOpenMobile={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <main
+        className="relative min-w-0 flex-1 overflow-y-auto"
+        style={{ background: 'var(--background-gradient)' }}
+      >
+        {/* Mobile hamburger */}
+        <div
+          className="flex items-center px-4 py-2 md:hidden"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="ui-button"
+            data-variant="ghost"
+            aria-label="Open menu"
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5">
           <Outlet />
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
