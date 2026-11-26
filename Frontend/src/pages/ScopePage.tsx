@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatDate, labelize } from "../lib/format";
 import { keys } from "../lib/keys";
@@ -10,6 +11,7 @@ import {
   type ScanTool,
 } from "../lib/types";
 import { useAssessment } from "../components/AssessmentLayout";
+import { InfoTip } from "../components/InfoTip";
 import {
   Badge,
   Button,
@@ -42,7 +44,6 @@ export function ScopePage() {
   const [checkTool, setCheckTool] = useState<ScanTool>("http_checks");
   const [checkPorts, setCheckPorts] = useState("");
   const [checkResult, setCheckResult] = useState<ScopeCheckResponse | null>(null);
-  const [confirmNote, setConfirmNote] = useState("");
 
   const list = useQuery({
     queryKey: keys.scope(assessment.id),
@@ -84,20 +85,6 @@ export function ScopePage() {
     onSuccess: (result) => setCheckResult(result),
   });
 
-  const confirm = useMutation({
-    mutationFn: () =>
-      api.assessments.confirmAuthorization(
-        assessment.id,
-        confirmNote.trim() || null,
-      ),
-    onSuccess: () => {
-      toast.push("Authorization confirmed. Scans are now allowed.", "success");
-      void queryClient.invalidateQueries({
-        queryKey: keys.assessment(assessment.id),
-      });
-    },
-  });
-
   function addItem(event: FormEvent) {
     event.preventDefault();
     if (!value.trim()) return;
@@ -112,33 +99,22 @@ export function ScopePage() {
       />
 
       {!assessment.authorization_confirmed ? (
-        <Card title="Confirm authorization">
+        <Card title="Authorization required">
           <p>
-            Scans are refused until the authorization reference{" "}
-            <strong>{assessment.authorization_reference}</strong> is confirmed.
-            Confirm only when the signed authorization is on file.
+            Scans stay blocked until the signed authorization is recorded. Choose
+            the authorization file in Settings; it is confirmed automatically.
           </p>
-          <div className="inline-form">
-            <input
-              placeholder="Optional note (max 2000)"
-              maxLength={2000}
-              value={confirmNote}
-              onChange={(event) => setConfirmNote(event.target.value)}
-              aria-label="Authorization note"
-            />
-            <Button
-              onClick={() => confirm.mutate()}
-              disabled={confirm.isPending}
-            >
-              {confirm.isPending ? "Confirming…" : "Confirm authorization"}
-            </Button>
-          </div>
-          {confirm.isError ? <ErrorNotice error={confirm.error} /> : null}
+          <Link to="../settings" className="btn btn-primary">
+            Add authorization file
+          </Link>
         </Card>
       ) : null}
 
       <div className="two-col two-col-wide">
-        <Card title="Add scope item">
+        <Card
+          title="Add scope item"
+          help="Every scan target must match an in-scope rule. Out-of-scope rules always win. Start with the target host and its URL prefix."
+        >
           {archived ? (
             <Notice tone="warning">
               Archived assessments cannot change scope. Unarchive in Settings first.
@@ -146,7 +122,10 @@ export function ScopePage() {
           ) : (
             <form onSubmit={addItem} className="stack">
               <div className="form-grid">
-                <Field label="Kind">
+                <Field
+                  label="Kind"
+                  help="How the value is interpreted: host, IP, CIDR range, URL prefix or port. Example: host for a DNS name."
+                >
                   <select
                     value={kind}
                     onChange={(event) => setKind(event.target.value as ScopeKind)}
@@ -158,7 +137,10 @@ export function ScopePage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Value">
+                <Field
+                  label="Value"
+                  help="The exact host, IP, CIDR, URL prefix or port to allow. Example: target or http://target:3000/."
+                >
                   <input
                     required
                     maxLength={2048}
@@ -176,7 +158,10 @@ export function ScopePage() {
                   />
                 </Field>
               </div>
-              <Field label="Note">
+              <Field
+                label="Note"
+                help="Why this rule exists or who approved it. Example: Authorized staging host from the letter."
+              >
                 <input
                   maxLength={500}
                   value={note}
@@ -190,7 +175,11 @@ export function ScopePage() {
                   checked={inScope}
                   onChange={(event) => setInScope(event.target.checked)}
                 />
-                In scope (uncheck to add an explicit exclusion)
+                <span>In scope (uncheck to add an explicit exclusion)</span>
+                <InfoTip label="Scope direction">
+                  In-scope rules allow a target. Out-of-scope rules always win.
+                  Example: uncheck to exclude a shared host.
+                </InfoTip>
               </label>
               <Button type="submit" disabled={create.isPending}>
                 {create.isPending ? "Adding…" : "Add item"}
@@ -200,7 +189,10 @@ export function ScopePage() {
           )}
         </Card>
 
-        <Card title="Dry-run scope check">
+        <Card
+          title="Dry-run scope check"
+          help="Test a target against the current rules before running a scan. This is audited and changes nothing."
+        >
           <form
             className="stack"
             onSubmit={(event) => {
@@ -208,7 +200,10 @@ export function ScopePage() {
               check.mutate();
             }}
           >
-            <Field label="Target">
+            <Field
+              label="Target"
+              help="The exact target you plan to scan. Example: http://target:3000/."
+            >
               <input
                 required
                 maxLength={2048}
@@ -217,7 +212,10 @@ export function ScopePage() {
               />
             </Field>
             <div className="form-grid">
-              <Field label="Tool">
+              <Field
+                label="Tool"
+                help="Scope rules can differ by tool. Choose the tool you will actually run. Example: http_checks."
+              >
                 <select
                   value={checkTool}
                   onChange={(event) =>
@@ -231,7 +229,11 @@ export function ScopePage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Ports" hint="Optional, comma-separated">
+              <Field
+                label="Ports"
+                hint="Optional, comma-separated"
+                help="Check specific ports as part of the scope decision. Example: 80, 443."
+              >
                 <input
                   value={checkPorts}
                   onChange={(event) => setCheckPorts(event.target.value)}
