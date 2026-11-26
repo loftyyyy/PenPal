@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { keys } from "../lib/keys";
 import { ASSESSMENT_STATUSES } from "../lib/types";
+import { OnboardingBanner } from "../components/OnboardingBanner";
 import {
   Button,
   EmptyState,
@@ -62,41 +63,51 @@ export function AssessmentsPage() {
         }
       />
 
-      <div className="toolbar">
-        <form
-          className="toolbar-search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            updateParams({ q: search.trim(), page: undefined });
-          }}
-        >
-          <input
-            type="search"
-            placeholder="Search name or target"
-            aria-label="Search assessments"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
-        </form>
-        <label className="inline-field">
-          <span>Status</span>
-          <select
-            value={status}
-            onChange={(event) =>
-              updateParams({ status: event.target.value, page: undefined })
-            }
-          >
-            <option value="">All</option>
-            {ASSESSMENT_STATUSES.map((option) => (
-              <option key={option} value={option}>
-                {option.replaceAll("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
+      <OnboardingBanner />
+
+      <div className="row-between list-toolbar">
+        <span className="muted tiny">
+          {query.data ? `${query.data.total} assessment${query.data.total === 1 ? "" : "s"}` : "Assessments"}
+        </span>
+        <details className="filter-drawer">
+          <summary>Find an assessment</summary>
+          <div className="filter-drawer-body">
+            <form
+              className="toolbar-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                updateParams({ q: search.trim(), page: undefined });
+              }}
+            >
+              <input
+                type="search"
+                placeholder="Search name or target"
+                aria-label="Search assessments"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <Button type="submit" variant="secondary">
+                Search
+              </Button>
+            </form>
+            <label className="inline-field">
+              <span>Status</span>
+              <select
+                value={status}
+                onChange={(event) =>
+                  updateParams({ status: event.target.value, page: undefined })
+                }
+              >
+                <option value="">All</option>
+                {ASSESSMENT_STATUSES.map((option) => (
+                  <option key={option} value={option}>
+                    {option.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </details>
       </div>
 
       {query.isLoading ? <Loading /> : null}
@@ -106,10 +117,10 @@ export function AssessmentsPage() {
       {query.data && query.data.items.length === 0 ? (
         <EmptyState
           title="No assessments yet"
-          description="Create one, add scope items and confirm authorization before scanning."
+          description="Start with step 1: create an assessment, choose the authorization file, then add scope."
           action={
             <Button onClick={() => navigate("/assessments/new")}>
-              New assessment
+              Start an assessment
             </Button>
           }
         />

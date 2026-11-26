@@ -257,7 +257,10 @@ export function FindingDetailPage() {
           ) : null}
         </Card>
 
-        <Card title="Severity and verification">
+        <Card
+          title="Severity and verification"
+          help="You own the decision. AI severity is advisory. Choose a decision, score likelihood and impact, and the server computes final severity."
+        >
           <div className="severity-triple">
             <div>
               <span className="muted tiny">Tool</span>
@@ -283,6 +286,7 @@ export function FindingDetailPage() {
             <Field
               label="Decision"
               hint="Final severity is always computed by the server."
+              help="Confirmed = real issue; False positive = not a vulnerability (reason required); Needs retest = keep open. Example: confirmed."
             >
               <select
                 value={decision}
@@ -307,7 +311,8 @@ export function FindingDetailPage() {
             <div className="form-grid">
               <Field
                 label="Likelihood"
-                hint="1 rare – 5 almost certain"
+                hint="1 rare - 5 almost certain"
+                help="How likely exploitation is in this environment. Example: 4 = likely. Required for confirmed findings."
               >
                 <select
                   value={likelihood}
@@ -324,7 +329,11 @@ export function FindingDetailPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Impact" hint="1 negligible – 5 severe">
+              <Field
+                label="Impact"
+                hint="1 negligible - 5 severe"
+                help="Harm if exploited. Example: 4 = major. Score = likelihood x impact; the server maps it to a severity."
+              >
                 <select
                   value={impact}
                   disabled={decision === "false_positive"}
@@ -357,6 +366,7 @@ export function FindingDetailPage() {
             {decision === "confirmed" ? (
               <Field
                 label="Final remediation"
+                help="The fix you stand behind. Example: Use parameterised queries and validate input. Leave empty only when a successful AI remediation exists."
                 hint={
                   remediationRequired
                     ? "Required unless a successful AI remediation already exists."
@@ -375,6 +385,11 @@ export function FindingDetailPage() {
             {decision !== "confirmed" ? (
               <Field
                 label={decision === "false_positive" ? "Reason (required)" : "Note"}
+                help={
+                  decision === "false_positive"
+                    ? "Explain why this is not a real vulnerability, at least 10 characters. Example: Test account was already locked; response was a generic error page."
+                    : "Optional context for the next assessor. Example: Recheck after the next release."
+                }
                 hint={
                   decision === "false_positive"
                     ? "At least 10 characters."
@@ -446,6 +461,7 @@ export function FindingDetailPage() {
 
       <Card
         title="Evidence"
+        help="Attach proof: a note, screenshot, text file or PDF. Files are size- and type-checked and hashed by the server."
         actions={
           <span className="muted tiny">
             Files: PNG, JPEG, TXT, PDF · max 5 MB
@@ -533,7 +549,10 @@ export function FindingDetailPage() {
             </label>
           </fieldset>
           {evidenceMode === "note" ? (
-            <Field label="Note text">
+            <Field
+              label="Note text"
+              help="A short reproduction note. Example: Replayed request with id=2 as staff; admin page returned 200."
+            >
               <textarea
                 rows={3}
                 value={evidenceNote}
@@ -541,7 +560,10 @@ export function FindingDetailPage() {
               />
             </Field>
           ) : (
-            <Field label="File">
+            <Field
+              label="File"
+              help="PNG, JPEG, TXT or PDF up to the server upload limit (default 5 MB). Example: screenshot.png."
+            >
               <input
                 type="file"
                 accept=".png,.jpg,.jpeg,.txt,.pdf,image/png,image/jpeg,text/plain,application/pdf"

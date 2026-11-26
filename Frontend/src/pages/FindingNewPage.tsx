@@ -68,7 +68,11 @@ export function FindingNewPage() {
       <form onSubmit={submit} className="stack-lg">
         <Card title="Finding">
           <div className="form-grid">
-            <Field label="Title" className="span-2">
+            <Field
+              label="Title"
+              className="span-2"
+              help="Short, specific name. Example: Staff can read another customer's record by changing the ID."
+            >
               <input
                 required
                 maxLength={500}
@@ -76,7 +80,11 @@ export function FindingNewPage() {
                 onChange={(event) => set("title", event.target.value)}
               />
             </Field>
-            <Field label="Description" className="span-2">
+            <Field
+              label="Description"
+              className="span-2"
+              help="What you did, what happened, and why it matters. Include a concrete example request or result."
+            >
               <textarea
                 rows={5}
                 maxLength={10000}
@@ -84,7 +92,10 @@ export function FindingNewPage() {
                 onChange={(event) => set("description", event.target.value)}
               />
             </Field>
-            <Field label="Category">
+            <Field
+              label="Category"
+              help="Group the finding for reporting. Example: access_control for broken authorization."
+            >
               <select
                 value={form.category}
                 onChange={(event) => set("category", event.target.value)}
@@ -96,7 +107,11 @@ export function FindingNewPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Tool severity" hint="Advisory until confirmed.">
+            <Field
+              label="Tool severity"
+              hint="Advisory until confirmed."
+              help="Your initial severity estimate. It is separate from AI and final severity. Example: medium."
+            >
               <select
                 value={form.severity}
                 onChange={(event) => set("severity", event.target.value)}
@@ -108,7 +123,11 @@ export function FindingNewPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Affected URL" className="span-2">
+            <Field
+              label="Affected URL"
+              className="span-2"
+              help="The endpoint involved. A relative path or absolute URL is fine. Example: /account/edit?id=2."
+            >
               <input
                 maxLength={2048}
                 value={form.affected_url}
@@ -116,7 +135,10 @@ export function FindingNewPage() {
                 placeholder="/account/edit?id=2"
               />
             </Field>
-            <Field label="HTTP method">
+            <Field
+              label="HTTP method"
+              help="Request method used. Example: GET."
+            >
               <input
                 maxLength={20}
                 value={form.http_method}
@@ -124,14 +146,20 @@ export function FindingNewPage() {
                 placeholder="GET"
               />
             </Field>
-            <Field label="Parameter">
+            <Field
+              label="Parameter"
+              help="The input that carried the issue. Example: id."
+            >
               <input
                 maxLength={200}
                 value={form.parameter}
                 onChange={(event) => set("parameter", event.target.value)}
               />
             </Field>
-            <Field label="CWE">
+            <Field
+              label="CWE"
+              help="Optional weakness identifier. Example: CWE-639."
+            >
               <input
                 maxLength={50}
                 value={form.cwe}
@@ -139,7 +167,10 @@ export function FindingNewPage() {
                 placeholder="CWE-639"
               />
             </Field>
-            <Field label="OWASP category">
+            <Field
+              label="OWASP category"
+              help="Optional OWASP Top 10 mapping. Example: A01:2021 Broken Access Control."
+            >
               <input
                 maxLength={100}
                 value={form.owasp_category}

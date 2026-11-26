@@ -178,9 +178,16 @@ export function AiPage() {
           ) : null}
         </Card>
 
-        <Card title="Run bulk analysis">
+        <Card
+          title="Run bulk analysis"
+          help="Runs interpretation and remediation for matching findings. AI output is advisory and audited. One job runs per assessment."
+        >
           <form onSubmit={runBulk} className="stack">
-            <Field label="Minimum severity" hint="Leave empty to include all.">
+            <Field
+              label="Minimum severity"
+              hint="Leave empty to include all."
+              help="Skip low-priority findings. Example: medium analyzes medium, high and critical only."
+            >
               <select
                 value={minSeverity}
                 onChange={(event) =>
@@ -231,6 +238,7 @@ export function AiPage() {
 
       <Card
         title="Assessment summary"
+        help="Summaries use confirmed findings only. AI drafts stay advisory until you edit and approve them; reports use the approved text."
         actions={
           <div className="row-actions">
             <label className="check-row compact">
@@ -285,6 +293,7 @@ export function AiPage() {
             <Field
               label="Summary text"
               hint="Editing an approved summary resets it to draft."
+              help="Assessor-owned executive summary. Keep it concise and factual; approval makes it the report narrative."
             >
               <textarea
                 rows={12}

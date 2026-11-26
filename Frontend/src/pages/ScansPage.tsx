@@ -140,7 +140,10 @@ export function ScansPage() {
           ) : (
             <form onSubmit={submit} className="stack">
               <div className="form-grid">
-                <Field label="Tool">
+                <Field
+                  label="Tool"
+                  help="Pick what to run: Nmap for ports, dig/whois for DNS and ownership, WhatWeb/curl/http_checks for web behavior, ZAP for web scanning. Example: nmap."
+                >
                   <select
                     value={tool}
                     onChange={(event) =>
@@ -154,7 +157,10 @@ export function ScansPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Profile">
+                <Field
+                  label="Profile"
+                  help="Intensity preset for the chosen tool. Quick is fast and low noise; standard/full_tcp broaden coverage. Example: quick."
+                >
                   <select
                     value={profile}
                     onChange={(event) => setProfile(event.target.value)}
@@ -169,6 +175,7 @@ export function ScansPage() {
               </div>
               <Field
                 label="Target"
+                help="Use a host or IP for Nmap, dig and whois. Use an absolute http(s) URL for ZAP, WhatWeb, curl and HTTP checks. Example: http://target:3000/."
                 hint={
                   tool === "nmap" || tool === "dig" || tool === "whois"
                     ? "Host or IP. Nmap accepts host plus explicit port."
@@ -183,7 +190,11 @@ export function ScansPage() {
                 />
               </Field>
               {tool === "nmap" ? (
-                <Field label="Ports" hint="Optional, comma-separated; empty uses the profile default.">
+                <Field
+                  label="Ports"
+                  hint="Optional, comma-separated; empty uses the profile default."
+                  help="Limit Nmap to specific ports. Example: 22, 80, 443. Leave empty to use the profile's default set."
+                >
                   <input
                     value={ports}
                     onChange={(event) => setPorts(event.target.value)}

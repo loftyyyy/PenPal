@@ -37,13 +37,16 @@ npm run build
 - AI severity and remediation are labelled advisory throughout.
 - Light/dark/system theme is persisted in `localStorage`; system is the default.
 - `Field` links labels to controls; all action buttons are keyboard reachable.
+- The authorization file picker records only the selected file name; the backend has
+  no assessment-file upload endpoint. Creating or replacing the file chains
+  `PATCH /assessments/{id}` with `POST /assessments/{id}/confirm-authorization`.
+- First-run onboarding and the assessment workflow checklist use local browser state
+  and live assessment/scope/dashboard data.
+- Component tests use Vitest + Testing Library (`jsdom`).
 
 ## Backend contract deviations found while building
 
-- `POST /findings/{id}/analyze` returns `{ finding_id, analyses: AIAnalysisOut[] }`.
-  `BACKEND_CONTEXT.md` names `FindingAnalysisOut` but does not define it.
 - Admin user updates for self-lockout / last-admin return `422` with
   `self_lockout` / `last_admin`, not the `409` listed in the error matrix.
-- With zero confirmed findings, summary generation stores a deterministic summary
-  instead of returning `409 no_confirmed_findings` (the endpoint description and the
-  error matrix disagree).
+- `BACKEND_CONTEXT.md` line 1302 lists `409 no_confirmed_findings` for summary
+  generation, but the endpoint and summary service store a deterministic summary.

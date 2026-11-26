@@ -6,6 +6,7 @@ import { keys } from "../lib/keys";
 import { SEVERITY_ORDER } from "../lib/severity";
 import type { SeverityCounts } from "../lib/types";
 import { useAssessment } from "../components/AssessmentLayout";
+import { GuidedChecklist, type GuidedStep } from "../components/GuidedChecklist";
 import {
   Badge,
   Button,
@@ -25,6 +26,10 @@ export function DashboardPage() {
     queryKey: keys.dashboard(assessment.id),
     queryFn: () => api.dashboard.get(assessment.id),
   });
+  const scopeQuery = useQuery({
+    queryKey: keys.scope(assessment.id),
+    queryFn: () => api.scope.list(assessment.id),
+  });
 
   if (query.isLoading) return <Loading label="Loading dashboard…" />;
   if (query.isError) {
@@ -34,6 +39,45 @@ export function DashboardPage() {
   }
   if (!query.data) return null;
   const data = query.data;
+  const scopeCount = scopeQuery.data?.length ?? 0;
+  const hasFindings = data.total_findings > 0;
+  const steps: GuidedStep[] = [
+    {
+      title: "Record authorization",
+      description: "Choose the signed file in Settings. Confirmation is automatic.",
+      done: assessment.authorization_confirmed,
+      to: "../settings",
+      action: "Add authorization",
+    },
+    {
+      title: "Add scope",
+      description: "Allowlist the target host and URL prefix before scanning.",
+      done: scopeCount > 0,
+      to: "../scope",
+      action: "Add scope",
+    },
+    {
+      title: "Run recon or a scan",
+      description: "Start with Nmap or a ZAP baseline against an in-scope target.",
+      done: data.scan_history.length > 0,
+      to: "../scans",
+      action: "Run a scan",
+    },
+    {
+      title: "Review findings",
+      description: "Read evidence and AI suggestions. AI severity stays advisory.",
+      done: hasFindings,
+      to: "../findings",
+      action: "Open findings",
+    },
+    {
+      title: "Verify findings",
+      description: "Confirm, reject or mark each finding for retest.",
+      done: hasFindings && data.status_counts.pending === 0,
+      to: "../findings",
+      action: "Verify findings",
+    },
+  ];
 
   return (
     <div className="stack-lg">
@@ -46,6 +90,8 @@ export function DashboardPage() {
           Refresh
         </Button>
       </div>
+
+      <GuidedChecklist steps={steps} />
 
       <div className="stat-grid">
         <Stat label="Total findings" value={data.total_findings} />
@@ -165,67 +211,70 @@ export function DashboardPage() {
         )}
       </Card>
 
-      <div className="two-col">
-        <Card title="Scan history">
-          {data.scan_history.length === 0 ? (
-            <EmptyState title="No scans yet" />
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Tool</th>
-                    <th>Profile</th>
-                    <th>Status</th>
-                    <th>Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.scan_history.map((scan) => (
-                    <tr key={scan.id}>
-                      <td>{scan.tool}</td>
-                      <td>{scan.profile}</td>
-                      <td>
-                        <StatusBadge status={scan.status} />
-                      </td>
-                      <td>{formatDuration(scan.duration_seconds)}</td>
+      <details className="section-details">
+        <summary>Operational detail</summary>
+        <div className="two-col">
+          <Card title="Scan history">
+            {data.scan_history.length === 0 ? (
+              <EmptyState title="No scans yet" />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tool</th>
+                      <th>Profile</th>
+                      <th>Status</th>
+                      <th>Duration</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+                  </thead>
+                  <tbody>
+                    {data.scan_history.map((scan) => (
+                      <tr key={scan.id}>
+                        <td>{scan.tool}</td>
+                        <td>{scan.profile}</td>
+                        <td>
+                          <StatusBadge status={scan.status} />
+                        </td>
+                        <td>{formatDuration(scan.duration_seconds)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
-        <Card title="Category counts">
-          {Object.keys(data.category_counts.confirmed).length === 0 &&
-          Object.keys(data.category_counts.unverified).length === 0 ? (
-            <EmptyState title="No categorized findings" />
-          ) : (
-            <div className="category-counts">
-              {Array.from(
-                new Set([
-                  ...Object.keys(data.category_counts.confirmed),
-                  ...Object.keys(data.category_counts.unverified),
-                ]),
-              ).map((category) => (
-                <div key={category} className="category-row">
-                  <span>{labelize(category)}</span>
-                  <span>
-                    <Badge tone="success">
-                      {data.category_counts.confirmed[category] ?? 0}
-                    </Badge>{" "}
-                    <Badge tone="neutral">
-                      {data.category_counts.unverified[category] ?? 0}
-                    </Badge>
-                  </span>
-                </div>
-              ))}
-              <p className="muted tiny">Confirmed · unverified</p>
-            </div>
-          )}
-        </Card>
-      </div>
+          <Card title="Category counts">
+            {Object.keys(data.category_counts.confirmed).length === 0 &&
+            Object.keys(data.category_counts.unverified).length === 0 ? (
+              <EmptyState title="No categorized findings" />
+            ) : (
+              <div className="category-counts">
+                {Array.from(
+                  new Set([
+                    ...Object.keys(data.category_counts.confirmed),
+                    ...Object.keys(data.category_counts.unverified),
+                  ]),
+                ).map((category) => (
+                  <div key={category} className="category-row">
+                    <span>{labelize(category)}</span>
+                    <span>
+                      <Badge tone="success">
+                        {data.category_counts.confirmed[category] ?? 0}
+                      </Badge>{" "}
+                      <Badge tone="neutral">
+                        {data.category_counts.unverified[category] ?? 0}
+                      </Badge>
+                    </span>
+                  </div>
+                ))}
+                <p className="muted tiny">Confirmed · unverified</p>
+              </div>
+            )}
+          </Card>
+        </div>
+      </details>
 
       <p className="muted tiny">{data.severity_basis}</p>
     </div>

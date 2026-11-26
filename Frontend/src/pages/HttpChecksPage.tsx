@@ -233,7 +233,10 @@ export function HttpChecksPage() {
       ) : null}
 
       <form onSubmit={save} className="stack-lg">
-        <Card title="Login specification">
+        <Card
+          title="Login specification"
+          help="Optional. Tell http_checks how to log in with test accounts so it can check sessions and role-based access. Example: POST /login with username and password fields."
+        >
           <label className="check-row">
             <input
               type="checkbox"
@@ -247,7 +250,11 @@ export function HttpChecksPage() {
 
           {loginEnabled ? (
             <div className="form-grid">
-              <Field label="Login URL" hint="Relative to the target base URL, or absolute in scope.">
+              <Field
+                label="Login URL"
+                hint="Relative to the target base URL, or absolute in scope."
+                help="Where the login form posts. Example: /login, or http://target:3000/login."
+              >
                 <input
                   required
                   maxLength={2048}
@@ -257,7 +264,10 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="Content type">
+              <Field
+                label="Content type"
+                help="How the login body is encoded. Use Form for HTML forms, JSON for API logins. Example: form."
+              >
                 <select
                   value={login.content_type}
                   onChange={(event) =>
@@ -271,7 +281,10 @@ export function HttpChecksPage() {
                   <option value="json">JSON</option>
                 </select>
               </Field>
-              <Field label="Username field">
+              <Field
+                label="Username field"
+                help="The form/JSON field that carries the username. Example: username."
+              >
                 <input
                   required
                   maxLength={100}
@@ -281,7 +294,10 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="Password field">
+              <Field
+                label="Password field"
+                help="The form/JSON field that carries the password. Example: password."
+              >
                 <input
                   required
                   maxLength={100}
@@ -291,7 +307,11 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="Success status" hint="100–599, or empty">
+              <Field
+                label="Success status"
+                hint="100–599, or empty"
+                help="HTTP status that means login worked. Example: 200 or 302. Leave empty if another check is enough."
+              >
                 <input
                   type="number"
                   min={100}
@@ -307,7 +327,11 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="Success redirect" hint="Optional">
+              <Field
+                label="Success redirect"
+                hint="Optional"
+                help="Optional Location header or URL fragment that means login worked. Example: /dashboard."
+              >
                 <input
                   maxLength={2048}
                   value={login.success_redirect ?? ""}
@@ -319,7 +343,11 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="Success regex" hint="Optional">
+              <Field
+                label="Success regex"
+                hint="Optional"
+                help="Optional response-body pattern for success. Example: Welcome, staff."
+              >
                 <input
                   maxLength={500}
                   value={login.success_regex ?? ""}
@@ -331,7 +359,11 @@ export function HttpChecksPage() {
                   }
                 />
               </Field>
-              <Field label="CSRF regex" hint="Optional">
+              <Field
+                label="CSRF regex"
+                hint="Optional"
+                help={'Optional pattern that extracts a CSRF token from the login page. Example: name="csrf_token" value="([^"]+)".'}
+              >
                 <input
                   maxLength={500}
                   value={login.csrf_regex ?? ""}
@@ -347,7 +379,10 @@ export function HttpChecksPage() {
           ) : null}
         </Card>
 
-        <Card title="Access rules">
+        <Card
+          title="Access rules"
+          help="Paths whose access should differ by role. Example: /admin should allow admin only. The checker requests each path as each configured role."
+        >
           <div className="stack">
             {accessRules.length === 0 ? (
               <EmptyState
@@ -358,7 +393,10 @@ export function HttpChecksPage() {
             {accessRules.map((rule, index) => (
               <div key={index} className="rule-row">
                 <div className="form-grid">
-                  <Field label="Path">
+                  <Field
+                    label="Path"
+                    help="Path to test, starting with /. Example: /admin/users."
+                  >
                     <input
                       required
                       maxLength={2048}
@@ -368,7 +406,10 @@ export function HttpChecksPage() {
                       }
                     />
                   </Field>
-                  <Field label="Method">
+                  <Field
+                    label="Method"
+                    help="Request method to test. Use GET unless the page expects HEAD or OPTIONS. Example: GET."
+                  >
                     <select
                       value={rule.method}
                       onChange={(event) =>
@@ -382,7 +423,11 @@ export function HttpChecksPage() {
                       <option value="OPTIONS">OPTIONS</option>
                     </select>
                   </Field>
-                  <Field label="Allowed roles" hint="Comma-separated">
+                  <Field
+                    label="Allowed roles"
+                    hint="Comma-separated"
+                    help="Roles that should be allowed on this path. Example: admin. Other roles should be denied."
+                  >
                     <CsvInput
                       value={rule.allowed_roles}
                       ariaLabel="Allowed roles"
@@ -391,7 +436,11 @@ export function HttpChecksPage() {
                       }
                     />
                   </Field>
-                  <Field label="Sample IDs" hint="Comma-separated, max 5">
+                  <Field
+                    label="Sample IDs"
+                    hint="Comma-separated, max 5"
+                    help="Optional record IDs to substitute into the path template. Example: 1, 2, 3. Used only with ID templates."
+                  >
                     <CsvInput
                       value={rule.sample_ids}
                       maxItems={5}
@@ -436,9 +485,16 @@ export function HttpChecksPage() {
           </div>
         </Card>
 
-        <Card title="Roles and limits">
+        <Card
+          title="Roles and limits"
+          help="Safety rails for HTTP checks: request count, rate and login attempts. Keep these low; they prevent disruptive testing."
+        >
           <div className="form-grid">
-            <Field label="Roles" hint="Comma-separated, max 10">
+            <Field
+              label="Roles"
+              hint="Comma-separated, max 10"
+              help="Test account roles to exercise. Example: staff, admin."
+            >
               <CsvInput
                 value={roles}
                 maxItems={10}
@@ -446,7 +502,11 @@ export function HttpChecksPage() {
                 onChange={setRoles}
               />
             </Field>
-            <Field label="Max requests" hint="1–500">
+            <Field
+              label="Max requests"
+              hint="1-500"
+              help="Total request budget for one HTTP-check run. Example: 200. Keep it low for a test environment."
+            >
               <input
                 type="number"
                 min={1}
@@ -457,7 +517,11 @@ export function HttpChecksPage() {
                 }
               />
             </Field>
-            <Field label="Max requests/second" hint=">0–10">
+            <Field
+              label="Max requests/second"
+              hint=">0-10"
+              help="Rate cap for outbound requests. Example: 2. Lower is safer for shared or fragile systems."
+            >
               <input
                 type="number"
                 min={0.1}
@@ -469,7 +533,11 @@ export function HttpChecksPage() {
                 }
               />
             </Field>
-            <Field label="Max login attempts" hint="1–10">
+            <Field
+              label="Max login attempts"
+              hint="1-10"
+              help="Maximum login attempts per account. Example: 5. Keep below the target's lockout threshold unless a lockout test is confirmed."
+            >
               <input
                 type="number"
                 min={1}
@@ -483,7 +551,11 @@ export function HttpChecksPage() {
                 }
               />
             </Field>
-            <Field label="Min login interval" hint="0–10 seconds">
+            <Field
+              label="Min login interval"
+              hint="0-10 seconds"
+              help="Pause between login attempts. Example: 1 second. Slower is safer against lockouts."
+            >
               <input
                 type="number"
                 min={0}
@@ -498,7 +570,11 @@ export function HttpChecksPage() {
                 }
               />
             </Field>
-            <Field label="Max redirects" hint="0–3">
+            <Field
+              label="Max redirects"
+              hint="0-3"
+              help="How many redirects to follow per request. Example: 3. Use 0 when redirect behavior itself is under test."
+            >
               <input
                 type="number"
                 min={0}

@@ -313,7 +313,11 @@ export function UsersPage() {
                   }
                 />
               </Field>
-              <Field label="Temporary password" hint="12–200 characters.">
+              <Field
+                label="Temporary password"
+                hint="12–200 characters."
+                help="Give the user this password out of band and ask them to change it. Example: a long unique passphrase."
+              >
                 <input
                   type="password"
                   required
@@ -326,7 +330,10 @@ export function UsersPage() {
                   }
                 />
               </Field>
-              <Field label="Role">
+              <Field
+                label="Role"
+                help="Assessors do assessment work. Admins also manage users. Example: assessor."
+              >
                 <select
                   value={createForm.role}
                   onChange={(event) =>

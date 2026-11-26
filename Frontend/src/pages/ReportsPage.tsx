@@ -17,6 +17,7 @@ import {
   StatusBadge,
 } from "../components/ui";
 import { useToast } from "../state/toast";
+import { InfoTip } from "../components/InfoTip";
 
 export function ReportsPage() {
   const assessment = useAssessment();
@@ -59,10 +60,19 @@ export function ReportsPage() {
         description="Reports use confirmed findings and the approved summary. PDF may fall back to HTML if rendering fails."
       />
 
-      <Card title="Generate report">
+      <Card
+        title="Generate report"
+        help="Builds the report from confirmed findings and the approved summary. PDF may fall back to HTML when rendering fails."
+      >
         <div className="inline-form">
           <label className="inline-field">
-            <span>Format</span>
+            <span>
+              Format
+              <InfoTip label="Report format">
+                HTML opens in a browser; PDF is best for submission. If PDF
+                rendering fails, PenPal returns a ready HTML report instead.
+              </InfoTip>
+            </span>
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as ReportFormat)}
