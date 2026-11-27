@@ -27,10 +27,11 @@ from app.services.finding_normalizer import (
     severity_from_risk,
 )
 from app.services.nmap_parser import parse_nmap_xml
+from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from tests.fakes import NMAP_FIXTURE, ZAP_MESSAGE_FIXTURE, load_zap_alerts
-from tests.utils import create_assessment, create_user
+from tests.utils import create_assessment, create_user, login_headers
 
 
 async def _scan(
@@ -390,3 +391,196 @@ async def test_normalize_zap_result_requires_alerts_list(db: AsyncSession) -> No
     scan = await _scan(db, assessment, user)
     with pytest.raises(ZapParseError, match="alerts is not a list"):
         await normalize_zap_result(db, scan, {"alerts": "nope"})
+
+def _active_limited_document() -> dict[str, Any]:
+    return {
+        "tool": "zap",
+        "version": "2.17.0",
+        "profile": "active_limited",
+        "target": "http://127.0.0.1:3000/",
+        "alerts": [
+            {
+                "alert": "Content Security Policy (CSP) Header Not Set",
+                "risk": "Medium",
+                "confidence": "High",
+                "pluginId": "10038",
+                "cweid": "693",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+            },
+            {
+                "alert": "Strict-Transport-Security Header Not Set",
+                "risk": "Low",
+                "confidence": "Low",
+                "pluginId": "10035",
+                "cweid": "319",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+            },
+            {
+                "alert": "X-Content-Type-Options Header Missing",
+                "risk": "Low",
+                "confidence": "Medium",
+                "pluginId": "10021",
+                "cweid": "693",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+            },
+            {
+                "alert": "Cookie No HttpOnly Flag",
+                "risk": "Low",
+                "confidence": "Medium",
+                "pluginId": "10010",
+                "cweid": "1004",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "sessionid",
+                "attack": "",
+                "evidence": "",
+            },
+            {
+                "alert": "Re-examine Cache-control Directives",
+                "risk": "Informational",
+                "confidence": "Low",
+                "pluginId": "10015",
+                "cweid": "-1",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+            },
+            {
+                "alert": "Modern Web Application",
+                "risk": "Informational",
+                "confidence": "Medium",
+                "pluginId": "10109",
+                "cweid": "-1",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+                "httpMessage": {
+                    "requestHeader": "GET / HTTP/1.1",
+                    "responseHeader": "HTTP/1.1 200 OK",
+                    "responseBody": "\u0000\u0001binary-woff",
+                },
+            },
+            {
+                "alert": "Unmapped informational alert",
+                "risk": "Informational",
+                "confidence": "Low",
+                "pluginId": "",
+                "cweid": "-1",
+                "method": "GET",
+                "url": "http://127.0.0.1:3000/",
+                "param": "",
+                "attack": "",
+                "evidence": "",
+            },
+        ],
+    }
+
+
+async def test_active_limited_zap_alerts_with_empty_fields_and_nul_are_saved(
+    db: AsyncSession,
+) -> None:
+    user = await create_user(db, email="active-limited@example.test")
+    assessment = await create_assessment(db, user=user, authorized=True)
+    scan = await _scan(
+        db, assessment, user, profile="active_limited", target="http://127.0.0.1:3000/"
+    )
+    document = _active_limited_document()
+    assert document["profile"] == "active_limited"
+
+    counts = await normalize_zap_result(db, scan, document)
+    await db.commit()
+    assert counts == {"created": 7, "updated": 0, "total": 7}
+
+    findings = (
+        (await db.execute(select(Finding).where(Finding.assessment_id == assessment.id)))
+        .scalars()
+        .all()
+    )
+    assert len(findings) == 7
+    assert {finding.source for finding in findings} == {FindingSource.ZAP}
+    assert all(finding.scan_id == scan.id for finding in findings)
+    severities = [finding.tool_severity for finding in findings]
+    assert severities.count(Severity.MEDIUM) == 1
+    assert severities.count(Severity.LOW) == 3
+    assert severities.count(Severity.INFO) == 3
+
+    cookie = next(finding for finding in findings if finding.title == "Cookie No HttpOnly Flag")
+    assert cookie.parameter == "sessionid"
+    cache = next(
+        finding
+        for finding in findings
+        if finding.title == "Re-examine Cache-control Directives"
+    )
+    assert cache.cwe is None
+    assert cache.parameter is None
+
+    modern = next(
+        finding for finding in findings if finding.title == "Modern Web Application"
+    )
+    assert "\x00" not in json.dumps(modern.raw)
+    evidence = (
+        (await db.execute(select(Evidence).where(Evidence.finding_id == modern.id)))
+        .scalars()
+        .all()
+    )
+    assert len(evidence) == 1
+    assert "\x00" not in (evidence[0].content or "")
+
+
+async def test_active_limited_alerts_reach_findings_and_dashboard(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    user = await create_user(db, email="active-dashboard@example.test")
+    headers = await login_headers(client, "active-dashboard@example.test")
+    assessment = await create_assessment(db, user=user, authorized=True)
+    scan = await _scan(
+        db, assessment, user, profile="active_limited", target="http://127.0.0.1:3000/"
+    )
+    await normalize_zap_result(db, scan, _active_limited_document())
+    await db.commit()
+
+    listed = await client.get(
+        f"/api/v1/assessments/{assessment.id}/findings?source=zap&page_size=100",
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["total"] == 7
+    assert {item["source"] for item in listed.json()["items"]} == {"zap"}
+
+    dashboard = await client.get(
+        f"/api/v1/assessments/{assessment.id}/dashboard", headers=headers
+    )
+    assert dashboard.status_code == 200, dashboard.text
+    body = dashboard.json()
+    assert body["total_findings"] == 7
+    assert body["severity_confirmed"] == {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+    }
+    assert body["severity_unverified"]["total"] == {
+        "critical": 0,
+        "high": 0,
+        "medium": 1,
+        "low": 3,
+        "info": 3,
+    }
+    assert body["status_counts"]["pending"] == 7

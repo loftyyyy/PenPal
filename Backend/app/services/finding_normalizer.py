@@ -184,6 +184,26 @@ class ZapParseError(ValueError):
     pass
 
 
+def _clean_text(value: str | None) -> str | None:
+    """Remove NUL, which PostgreSQL text and JSONB cannot store."""
+    if value is None:
+        return None
+    return value.replace("\x00", "")
+
+
+def _clean_json(value: Any) -> Any:
+    if isinstance(value, str):
+        return _clean_text(value) or ""
+    if isinstance(value, list):
+        return [_clean_json(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            (_clean_text(str(key)) or ""): _clean_json(item)
+            for key, item in value.items()
+        }
+    return value
+
+
 def parse_zap_document(data: bytes) -> dict[str, Any]:
     if not data or len(data) > MAX_ZAP_JSON_BYTES:
         raise ZapParseError("ZAP JSON is empty or larger than the 50 MB limit")
@@ -370,6 +390,15 @@ async def _upsert_finding(
         )
     )
     now = utcnow()
+    title = _clean_text(title) or "Untitled finding"
+    description = _clean_text(description)
+    owasp_category = _clean_text(owasp_category)
+    cwe = _clean_text(cwe)
+    affected_url = _clean_text(affected_url)
+    method = _clean_text(method)
+    parameter = _clean_text(parameter)
+    confidence = _clean_text(confidence)
+    raw = _clean_json(raw)
     if existing is not None:
         existing.title = title[:500]
         existing.description = description
@@ -435,6 +464,7 @@ async def _add_http_evidence(
             str(message.get("responseBody") or ""),
         ]
     ).strip()
+    content = _clean_text(content) or ""
     if not content or content == "REQUEST\n\n\nRESPONSE":
         return
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -636,7 +666,8 @@ async def normalize_http_checks_result(
         )
         evidence = item.get("evidence")
         if evidence:
-            digest = hashlib.sha256(str(evidence).encode("utf-8")).hexdigest()
+            evidence_text = _clean_text(str(evidence)) or ""
+            digest = hashlib.sha256(evidence_text.encode("utf-8")).hexdigest()
             existing = await db.scalar(
                 select(Evidence.id).where(
                     Evidence.finding_id == finding.id,
@@ -650,7 +681,7 @@ async def normalize_http_checks_result(
                         finding_id=finding.id,
                         scan_id=scan.id,
                         type=EvidenceType.HTTP_EXCHANGE,
-                        content=str(evidence),
+                        content=evidence_text,
                         sha256=digest,
                         created_by=scan.created_by,
                     )

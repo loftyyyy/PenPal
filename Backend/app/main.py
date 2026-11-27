@@ -14,6 +14,7 @@ from app.api.v1 import (
     assessments,
     audit,
     auth,
+    authorization_files,
     dashboard,
     findings,
     health,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
             {"name": "Auth", "description": "Login and current user"},
             {"name": "Users", "description": "Administrator user management"},
             {"name": "Assessments", "description": "Assessment registration and authorization"},
+            {"name": "Authorization files", "description": "Target-ownership verification tokens"},
             {"name": "Scope", "description": "In-scope and out-of-scope rules; dry-run checks"},
             {"name": "Scans", "description": "Nmap and ZAP scan lifecycle"},
             {"name": "Recon", "description": "Aggregated Nmap reconnaissance"},
@@ -137,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix=settings.api_prefix)
     app.include_router(users.router, prefix=settings.api_prefix)
     app.include_router(assessments.router, prefix=settings.api_prefix)
+    app.include_router(authorization_files.router, prefix=settings.api_prefix)
     app.include_router(scope.router, prefix=settings.api_prefix)
     app.include_router(scans.router, prefix=settings.api_prefix)
     app.include_router(recon.router, prefix=settings.api_prefix)
