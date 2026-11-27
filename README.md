@@ -10,9 +10,9 @@ what the product must never do.
 
 ## Status
 
-Backend complete for the course phases. See `docs/PROGRESS.md` for what was built,
+Backend and frontend are implemented. See `docs/PROGRESS.md` for what was built,
 `docs/DECISIONS.md` for non-obvious choices, and `BACKEND_CONTEXT.md` for the complete
-frontend integration contract.
+API contract. The React frontend lives in `Frontend/`.
 
 ## Quick start
 
@@ -20,9 +20,15 @@ frontend integration contract.
 cp .env.example .env
 # edit .env: set SECRET_KEY, FIRST_ADMIN_PASSWORD, ZAP_API_KEY, CREDENTIALS_KEY
 # and the AI provider values. See "Configuration".
+
 docker compose --profile dev-target up --build -d
+
+cd Frontend
+npm install
+npm run dev
 ```
 
+- Frontend: http://localhost:5173
 - API health: http://localhost:8000/api/v1/health
 - OpenAPI/Swagger (development only): http://localhost:8000/docs
 - The container runs `alembic upgrade head` and the first-admin bootstrap on start.
@@ -35,8 +41,8 @@ LSRS copy.
 
 ## Running the backend, step by step
 
-Prerequisites: Docker Desktop or Docker Engine with Compose, at least 4 GB free RAM
-(ZAP uses 2 GB), and the repo `.env` filled in.
+Prerequisites: Docker Desktop or Docker Engine with Compose, Node.js 22+ with npm, at
+least 4 GB free RAM (ZAP uses 2 GB), and the repo `.env` filled in.
 
 1. Open a terminal at the repo root:
 
@@ -135,6 +141,56 @@ The backend container runs `alembic upgrade head` and the first-admin bootstrap 
 start. Uploaded evidence and reports live in the `penpal_data` volume; PostgreSQL lives
 in `penpal_db`.
 
+## Running the frontend, step by step
+
+Prerequisite: the backend stack is running on `http://localhost:8000`.
+
+1. Install dependencies and start Vite:
+
+```bash
+cd Frontend
+npm install
+npm run dev
+```
+
+2. Open http://localhost:5173.
+
+3. Sign in with the first-admin credentials from `.env`
+   (`FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD`).
+
+The frontend defaults to `VITE_API_BASE_URL=http://localhost:8000/api/v1`. The backend
+allows `http://localhost:5173` by default through `CORS_ORIGINS`. No frontend `.env` is
+needed for the normal local setup.
+
+If port `5173` is already taken, Vite chooses another port and the browser origin no
+longer matches the backend CORS allowlist. Pick one fix:
+
+```bash
+# A. Start on another port through the Vite proxy
+cd Frontend
+$env:VITE_API_BASE_URL='/api/v1'   # PowerShell
+# export VITE_API_BASE_URL=/api/v1 # bash
+npm run dev -- --port 5174
+
+# B. Allow the new origin in the repo .env, then restart the backend
+CORS_ORIGINS=http://localhost:5173,http://localhost:5174
+docker compose up -d --force-recreate backend
+```
+
+Verify the frontend:
+
+```bash
+cd Frontend
+npm run typecheck
+npm test
+npm run build
+```
+
+The React app covers login, assessments, scope, scans, recon, findings and verification,
+HTTP checks, AI analyses and summaries, dashboard, reports, audit log and admin users.
+Target-ownership authorization files are available through the API; see
+`BACKEND_CONTEXT.md`.
+
 ## ZAP API key
 
 There is no external ZAP key to obtain. You generate one and give the same value to the
@@ -153,8 +209,10 @@ does not match, `/health/dependencies` reports ZAP unreachable and ZAP scans fai
 
 The backend can run on a web-visible Docker host, but keep the security boundary:
 
-- Publish only the backend, behind HTTPS (reverse proxy or load balancer). Never publish
-  PostgreSQL or ZAP.
+- Publish the frontend and backend behind HTTPS (reverse proxy or load balancer). Never
+  publish PostgreSQL or ZAP.
+- Build the frontend with `VITE_API_BASE_URL` set to the public API URL; serve `Frontend/dist/`
+  as static files or through a small web server.
 - Set `ENV=production`, strong `SECRET_KEY`, `FIRST_ADMIN_PASSWORD`, `ZAP_API_KEY` and
   `CREDENTIALS_KEY`; `/docs` is disabled in production.
 - Persist `DATA_DIR` (evidence, uploads, reports) and the PostgreSQL volume.
@@ -182,7 +240,18 @@ pytest
 ruff check app tests
 ```
 
+Frontend:
+
+```bash
+cd Frontend
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
 Tests use SQLite and fakes. They never call ZAP, Nmap, scan targets or an AI provider.
+Frontend tests use Vitest, Testing Library and jsdom; no live backend is required.
 
 ## Migrations and seed data
 
@@ -298,6 +367,7 @@ All routes are under `/api/v1`. See `/docs` for the full OpenAPI schema.
 | Auth | `POST /auth/login`, `GET /auth/me` |
 | Users (admin) | `POST /users`, `GET /users`, `PATCH /users/{id}` |
 | Assessments | `POST/GET /assessments`, `GET/PATCH /assessments/{id}`, `POST /assessments/{id}/confirm-authorization`, `POST /assessments/{id}/archive` |
+| Authorization files | `POST/GET /assessments/{id}/authorization-files`, `GET /authorization-files/{id}`, `GET /authorization-files/{id}/file`, `POST /authorization-files/{id}/verify`, `POST /authorization-files/{id}/revoke` |
 | Scope | `POST/GET /assessments/{id}/scope-items`, `DELETE /assessments/{id}/scope-items/{item_id}`, `POST /assessments/{id}/scope/check` |
 | Scans | `POST/GET /assessments/{id}/scans`, `GET /scans/{id}`, `POST /scans/{id}/cancel`, `GET /scans/{id}/raw` |
 | Recon | `GET /assessments/{id}/recon` |
@@ -421,7 +491,8 @@ non-zero on the first failure. It is not part of `pytest`.
 
 ## Known limitations
 
-- Backend only; the frontend is a separate deliverable.
+- Target-ownership authorization files are available through the API; there is no
+  dedicated frontend management screen yet.
 - Single backend process: scan and bulk-AI progress are in memory. A restart marks
   queued/running scans failed with `interrupted by restart`.
 - `http_checks` implements a conservative subset: configuration baseline, cookie flags,
@@ -430,8 +501,8 @@ non-zero on the first failure. It is not part of `pytest`.
 - IDOR sample-ID templating is not implemented; the cut list in the follow-up prompt
   allowed dropping it.
 - Real Nmap/dig/whois/WhatWeb/ZAP/HTTP-check/PDF execution is verified in the Compose
-  container; this development host has no Docker and no Nmap/dig/WhatWeb. WeasyPrint's
-  system libraries may also be absent locally.
+  container; a bare local Python environment may lack those tools and WeasyPrint system
+  libraries.
 - The exact LSRS address and final Gemini/OpenRouter model names remain environment
   decisions. The authorized deployed LSRS host is allowed only when listed exactly in
   `ALLOWED_PUBLIC_TARGETS` with `ALLOW_PUBLIC_TARGETS=true`; every other public target
@@ -452,7 +523,14 @@ Backend/
   alembic/
   scripts/seed.py
   tests/
-docs/                  PROGRESS.md, DECISIONS.md
+Frontend/
+  src/
+    components/        shell, guided checklist, tooltips, file drop, UI primitives
+    lib/               typed API client, types, formatting, severity helpers
+    pages/             login, assessments, scope, scans, findings, AI, reports, audit
+    state/             auth, theme, toasts
+    test/              Vitest + Testing Library setup
+docs/                   PROGRESS.md, DECISIONS.md, openapi.json
 docker-compose.yml
 .env.example
 ```
